@@ -35,6 +35,10 @@ class Vault:
     def type_of(self, token: str) -> str:
         return token.split("#")[0]
 
+    def items(self) -> list[tuple[str, str, str]]:
+        """(type, value, token) for every value that has a placeholder."""
+        return [(t.split("#")[0], v, t) for t, v in self._by_token.items()]
+
     def tokens(self) -> list[str]:
         return list(self._by_token)
 

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from app.context_rules import find_contextual
 from app.models import Finding
 from app.rules import Rules
+from app.vault import Vault
 
 ZERO_WIDTH = set("​‌‍⁠﻿")
 SEP = r"[ \-.\n]"
@@ -165,7 +166,22 @@ def _custom_findings(text: str, rules: Rules) -> list[Finding]:
     return found
 
 
-def find_sensitive(text: str, rules: Rules | None = None) -> list[Finding]:
+KNOWN_MIN_LEN = 5
+KNOWN_SKIP = {"CVV", "EXPIRY"}
+
+
+def _known_findings(text: str, vault: Vault) -> list[Finding]:
+    found = []
+    known = [(t, v) for t, v, _ in vault.items()] + [("CUSTOM", c) for c in vault.canaries]
+    for type_, value in known:
+        if len(value) < KNOWN_MIN_LEN or type_ in KNOWN_SKIP:
+            continue
+        for m in re.finditer(re.escape(value), text):
+            found.append(Finding(type_, m.start(), m.end(), value, "a detail you saved earlier", "context", 1.0))
+    return found
+
+
+def find_sensitive(text: str, rules: Rules | None = None, vault: Vault | None = None) -> list[Finding]:
     rules = rules or Rules()
     norm, origin = normalize(text)
     found: list[Finding] = []
@@ -174,4 +190,6 @@ def find_sensitive(text: str, rules: Rules | None = None) -> list[Finding]:
             found += _scan(pattern, norm, origin, text)
     found += [f for f in find_contextual(text) if rules.on(f.type)]
     found += _custom_findings(text, rules)
+    if vault:
+        found += _known_findings(text, vault)
     return _resolve_overlaps(found)

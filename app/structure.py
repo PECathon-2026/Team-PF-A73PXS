@@ -9,9 +9,12 @@ AUTOCOMPLETE_TYPES = {
     "tel": ("PHONE", "phone field"),
     "name": ("NAME", "name field"),
     "street-address": ("ADDRESS", "address field"),
+    "cc-name": ("NAME", "name on card field"),
     "current-password": ("PASSWORD", "password field"),
     "new-password": ("PASSWORD", "password field"),
 }
+
+INPUT_TYPES = {"email": ("EMAIL", "email field"), "tel": ("PHONE", "phone field")}
 
 # Checked in order, so cvv wins over card and aadhaar over the generic key word.
 NAME_WORDS = [
@@ -30,6 +33,8 @@ def structural_type(attrs: dict[str, str]) -> tuple[str, str] | None:
     """Decide from markup alone whether an input holds something sensitive."""
     if attrs.get("type") == "password":
         return "PASSWORD", "password field"
+    if attrs.get("type") in INPUT_TYPES:
+        return INPUT_TYPES[attrs["type"]]
     hint = AUTOCOMPLETE_TYPES.get(attrs.get("autocomplete", "").lower())
     if hint:
         return hint

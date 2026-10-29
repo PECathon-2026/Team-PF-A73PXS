@@ -1,0 +1,25 @@
+{
+  "text": [
+    {"name": "card with spaces", "text": "card 4111 1111 1111 1111", "expect": "CARD"},
+    {"name": "card with dashes", "text": "card 4111-1111-1111-1111", "expect": "CARD"},
+    {"name": "card with dots", "text": "card 4111.1111.1111.1111", "expect": "CARD"},
+    {"name": "card with zero-width characters", "text": "card 4​111‌ 1111 1111‍ 1111", "expect": "CARD"},
+    {"name": "card in full-width digits", "text": "card ４１１１ １１１１ 1111 1111", "expect": "CARD"},
+    {"name": "card split over lines", "text": "card 4111 1111\n1111 1111", "expect": "CARD"},
+    {"name": "email in mixed text", "text": "write to Test.User@Example.Test today", "expect": "EMAIL"},
+    {"name": "phone with country code and dashes", "text": "call +91-98765-43210", "expect": "PHONE"},
+    {"name": "pan in lowercase sentence context", "text": "my PAN is ABCPE1234F ok", "expect": "PAN"},
+    {"name": "api key after the word token", "text": "token: Zk3Qx9Lm2Pv8Rt5Wn7Yb4Hc6Jd1Fg0S", "expect": "API_KEY"},
+    {"name": "password in a sentence", "text": "password: Sup3rSecret!", "expect": "PASSWORD"},
+    {"name": "otp near the word code", "text": "Your code is 918273", "expect": "OTP"}
+  ],
+  "hostile_replies": [
+    {"name": "malformed JSON", "reply": "click the pay button"},
+    {"name": "unknown action", "reply": "{\"action\": \"format_disk\", \"target\": \"e1\"}"},
+    {"name": "missing target", "reply": "{\"action\": \"click\", \"target\": \"e999\"}"},
+    {"name": "guessed card number", "reply": "{\"action\": \"type\", \"target\": \"@card_number\", \"value\": \"4242 4242 4242 4242\"}"},
+    {"name": "card token in the wrong field", "reply": "{\"action\": \"type\", \"target\": \"@full_name\", \"value\": \"{{CARD#1}}\"}"},
+    {"name": "placeholder pasted as text", "reply": "{\"action\": \"type\", \"target\": \"@card_number\", \"value\": \"[REDACTED:CARD#1]\"}"},
+    {"name": "off-site address in a value", "reply": "{\"action\": \"type\", \"target\": \"@full_name\", \"value\": \"https://evil.example/collect\"}"}
+  ]
+}

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>PrivacyLens</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main id="main" class="main">
+    <h1 class="brand">PrivacyLens</h1>
+
+    <section class="view" aria-label="Live view">
+      <div class="frame" id="frame">
+        <img id="img-real" class="shot is-shown" alt="The page the assistant is working on">
+        <img id="img-ai" class="shot" alt="The same page with private details blacked out">
+        <div id="frost" class="frost" aria-hidden="true"></div>
+        <p id="empty" class="empty">Pick a task below to begin.</p>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="ai-view" role="switch">
+        <span class="track" aria-hidden="true"></span>
+        <span>See what the AI sees</span>
+      </label>
+    </section>
+
+    <button type="button" id="status" class="status" aria-live="polite">Ready when you are</button>
+    <p id="narration" class="narration" aria-live="polite"></p>
+
+    <form id="task-form" class="task">
+      <label for="task" class="task-label">What should I do?</label>
+      <div class="task-row">
+        <input id="task" name="task" type="text" autocomplete="off" required>
+        <button type="submit" class="primary">Go</button>
+      </div>
+      <div id="chips" class="chips" role="group" aria-label="Suggestions"></div>
+    </form>
+
+    <button type="button" id="how-link" class="link how-link">How it works</button>
+  </main>
+
+  <div id="status-sheet" class="backdrop" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="status-title">
+      <h2 id="status-title">Kept on this device</h2>
+      <ul id="status-list" class="list"></ul>
+      <button type="button" class="secondary" data-close>Close</button>
+    </div>
+  </div>
+
+  <div id="approval" class="backdrop" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="approval-q">
+      <p class="eyebrow">Needs your OK</p>
+      <h2 id="approval-q"></h2>
+      <button type="button" id="approve" class="primary big">Approve</button>
+      <button type="button" id="cancel" class="quiet">Cancel</button>
+      <button type="button" id="why-link" class="link" aria-expanded="false" aria-controls="why">Why am I asked?</button>
+      <p id="why" class="why" hidden></p>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

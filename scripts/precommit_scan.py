@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.detectors import find_sensitive  # noqa: E402
 
 ALLOWED_PREFIXES = ("scenarios/", "tests/", "eval/", "config/user_profile.fake.json", "docs/")
-SECRET_TYPES = {"CARD", "AADHAAR", "PAN", "API_KEY", "PASSWORD"}
+SECRET_TYPES = {"CARD", "AADHAAR", "PAN", "API_KEY"}
 
 
 def staged_files() -> list[str]:

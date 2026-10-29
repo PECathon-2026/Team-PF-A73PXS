@@ -25,6 +25,7 @@ class Element:
     selector: str = ""
     sensitive_type: str = ""
     sensitive_reason: str = ""
+    href: str = ""
     can_click: bool = False
     can_type: bool = False
     hidden: bool = False
@@ -57,6 +58,7 @@ class SanitizedSnapshot:
     screenshot: bytes
     report: list[ReportItem]
     element_types: dict[str, str] = field(default_factory=dict)
+    boxes: list[tuple[float, float, float, float]] = field(default_factory=list)
 
 
 @dataclass

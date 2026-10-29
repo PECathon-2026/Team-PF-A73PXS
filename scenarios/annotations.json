@@ -406,6 +406,11 @@
           "value": "CANARY-7Q2X9-J",
           "type": "CANARY",
           "location": "visible"
+        },
+        {
+          "value": "5012345678",
+          "type": "ACCOUNT",
+          "location": "visible"
         }
       ],
       "lookalikes": [
@@ -416,10 +421,6 @@
         {
           "value": "7200145566778899",
           "why": "fails the Luhn check, so not a card number"
-        },
-        {
-          "value": "5012345678",
-          "why": "10-digit number starting 1-5, not an Indian mobile number"
         },
         {
           "value": "Rs 8,120.50",

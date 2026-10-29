@@ -1,14 +1,16 @@
 import io
+import re
 from dataclasses import replace
 
 from PIL import Image, ImageDraw
 
 from app.detectors import find_sensitive
 from app.faces import find_faces
-from app.models import Finding, ReportItem, SanitizedSnapshot, Snapshot
+from app.models import Element, Finding, ReportItem, SanitizedSnapshot, Snapshot
 from app.rules import Rules
 from app.vault import Vault
 
+PERSON_IMAGE = re.compile(r"avatar|participant|profile|face|photo|portrait|camera", re.I)
 CARD_BRANDS = {"4": "Visa", "5": "Mastercard", "3": "Amex", "6": "RuPay"}
 KEY_PROVIDERS = {"AKIA": "AWS", "ghp_": "GitHub", "sk-": "secret key", "AIza": "Google", "xox": "Slack"}
 
@@ -40,7 +42,7 @@ class _Redactor:
         return placeholder
 
     def text(self, text: str) -> str:
-        for f in reversed(find_sensitive(text, self.rules)):
+        for f in reversed(find_sensitive(text, self.rules, self.vault)):
             placeholder = self.note(f.type, f.value, f.reason, f.source, hint_for(f, self.rules))
             text = text[:f.start] + placeholder + text[f.end:]
         return text
@@ -59,29 +61,41 @@ def _blackout(png: bytes, boxes: list[tuple[float, float, float, float]]) -> byt
 def _sensitive_boxes(snap: Snapshot, rules: Rules) -> list[tuple[float, float, float, float]]:
     boxes = [box for _, box in snap.text_boxes]
     for e in snap.elements:
-        if (e.sensitive_type and e.value) or e.tag == "video":
+        if (e.sensitive_type and (e.value or (e.text and not e.can_type))) or e.tag == "video" or (e.tag == "img" and PERSON_IMAGE.search(e.label)):
             boxes.append(e.box)
     if rules.on("FACE"):
         boxes += [tuple(float(v) for v in b) for b in find_faces(snap.screenshot)]
     return boxes
 
 
+def _structural_placeholder(e: Element, red: _Redactor, rules: Rules) -> dict[str, str]:
+    """Hide values that are sensitive because of where they sit (a password box, a name tile)."""
+    if not (e.sensitive_type and rules.on(e.sensitive_type)):
+        return {}
+    if e.value:
+        return {"value": red.note(e.sensitive_type, e.value, e.sensitive_reason, "structure")}
+    if e.text and not e.can_type:
+        return {"text": red.note(e.sensitive_type, e.text, e.sensitive_reason, "structure")}
+    return {}
+
+
 def sanitize(snap: Snapshot, vault: Vault, rules: Rules) -> SanitizedSnapshot:
     red = _Redactor(vault, rules)
+    # Register structural values first so every later mention of them, such as an image alt text, is hidden too.
+    fixed = {e.id: _structural_placeholder(e, red, rules) for e in snap.elements}
     elements = []
     for e in snap.elements:
-        value = e.value
-        if e.sensitive_type and e.value and rules.on(e.sensitive_type):
-            value = red.note(e.sensitive_type, e.value, e.sensitive_reason, "structure")
-        else:
-            value = red.text(e.value)
-        elements.append(replace(e, text=red.text(e.text), label=red.text(e.label), value=value, selector=""))
+        text = fixed[e.id].get("text") or red.text(e.text)
+        value = fixed[e.id].get("value") or red.text(e.value)
+        elements.append(replace(e, text=text, label=red.text(e.label), value=value, selector=""))
+    boxes = _sensitive_boxes(snap, rules)
     return SanitizedSnapshot(
         url=red.text(snap.url),
         elements=elements,
         page_text=red.text(snap.page_text),
         aria=red.text(snap.aria),
-        screenshot=_blackout(snap.screenshot, _sensitive_boxes(snap, rules)),
+        screenshot=_blackout(snap.screenshot, boxes),
         report=list(red.report.values()),
         element_types={e.id: e.sensitive_type for e in snap.elements if e.sensitive_type},
+        boxes=boxes,
     )
