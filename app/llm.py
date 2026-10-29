@@ -117,6 +117,10 @@ class GeminiLLM:
                                headers={"x-goog-api-key": self.key})
                 r.raise_for_status()
                 return r.json()["candidates"][0]["content"]["parts"][0]["text"]
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code < 500 and exc.response.status_code != 429:
+                    raise LLMError("the AI service rejected the request") from None
+                time.sleep(1 + attempt)
             except (httpx.HTTPError, KeyError, IndexError, ValueError):
                 time.sleep(1 + attempt)
         raise LLMError("the AI service could not be reached")

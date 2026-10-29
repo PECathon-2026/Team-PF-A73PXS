@@ -17,7 +17,15 @@ async def block_external(context, on_block) -> None:
             on_block(parsed.hostname or parsed.scheme)
             await route.abort()
 
+    async def socket_handler(ws):
+        if urlparse(ws.url).hostname not in LOCAL_HOSTS:
+            on_block(urlparse(ws.url).hostname or "websocket")
+            await ws.close()
+        else:
+            ws.connect_to_server()
+
     await context.route("**/*", handler)
+    await context.route_web_socket("**/*", socket_handler)
 
 
 def fill_value(value: str, vault: Vault) -> str:

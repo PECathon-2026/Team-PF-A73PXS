@@ -9,7 +9,9 @@ from pathlib import Path
 
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import Body, FastAPI
+import re
+
+from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
@@ -54,6 +56,12 @@ def _png_size(png: bytes) -> list[int]:
     return list(Image.open(BytesIO(png)).size) if png else [0, 0]
 
 
+def local_only(request: Request) -> None:
+    """Phones may watch and approve; changing settings or starting runs stays on this machine."""
+    if request.client and request.client.host not in ("127.0.0.1", "::1", "localhost"):
+        raise HTTPException(403, "only available on the computer running PrivacyLens")
+
+
 @app.get("/api/scenarios")
 def scenarios():
     return [{"key": k, "title": TITLES[k], "task": task_for(k)} for k in agent.SCENARIO_FILES]
@@ -65,7 +73,8 @@ def config():
 
 
 @app.post("/api/config")
-def set_ai(body: dict = Body(...)):
+def set_ai(request: Request, body: dict = Body(...)):
+    local_only(request)
     if body.get("ai") == "gemini" and not os.getenv("GEMINI_API_KEY"):
         return {"ok": False, "error": "No Gemini key found in .env"}
     state.ai = body["ai"]
@@ -73,7 +82,8 @@ def set_ai(body: dict = Body(...)):
 
 
 @app.post("/api/session")
-async def start_session(body: dict = Body(...)):
+async def start_session(request: Request, body: dict = Body(...)):
+    local_only(request)
     if state.session:
         await state.session.close()
     s = agent.Session(body["scenario"], body.get("task") or task_for(body["scenario"]), state.ai, state.rules)
@@ -117,11 +127,21 @@ def approve(body: dict = Body(...)):
 
 
 @app.post("/api/leak-test")
-async def leak_test():
+async def leak_test(request: Request):
+    local_only(request)
     if state.session is None:
-        await start_session({"scenario": "checkout"})
+        await start_session(request, {"scenario": "checkout"})
         await asyncio.sleep(0.5)
     return {"blocked": await agent.leak_test(state.session)}
+
+
+def _check_pattern(pattern: str) -> None:
+    if len(pattern) > 100:
+        raise HTTPException(400, "That rule is too long.")
+    try:
+        re.compile(pattern)
+    except re.error:
+        raise HTTPException(400, "That rule is not a valid pattern.") from None
 
 
 @app.get("/api/rules")
@@ -130,7 +150,10 @@ def get_rules():
 
 
 @app.put("/api/rules")
-def put_rules(body: dict = Body(...)):
+def put_rules(request: Request, body: dict = Body(...)):
+    local_only(request)
+    for pattern in body.get("custom", []):
+        _check_pattern(pattern)
     state.rules.enabled.update(body.get("enabled", {}))
     state.rules.hints = body.get("hints", state.rules.hints)
     state.rules.custom = [c for c in body.get("custom", state.rules.custom) if c.strip()]
@@ -145,7 +168,8 @@ def eval_results():
 
 
 @app.post("/api/eval/run")
-async def run_eval():
+async def run_eval(request: Request):
+    local_only(request)
     proc = await asyncio.create_subprocess_exec(sys.executable, str(ROOT / "eval" / "run_eval.py"), "--quick",
                                                 cwd=str(ROOT))
     await proc.wait()

@@ -1,6 +1,6 @@
 # PrivacyLens evaluation
 
-Run on Windows-11-10.0.26200-SP0, mode: quick.
+Run on Windows-11-10.0.26200-SP0, mode: full.
 
 | Measure | Result |
 |---|---|
@@ -28,14 +28,14 @@ Recall by type:
 
 Latency (ms):
 
-- snapshot: median 238.3, p95 358.4
-- detect: median 3.6, p95 4.9
-- sanitize: median 221.5, p95 278.0
-- guard: median 32.1, p95 44.3
-- full_step: median 1137.5, p95 1487.4
+- snapshot: median 123.8, p95 179.3
+- detect: median 2.3, p95 3.6
+- sanitize: median 140.0, p95 193.1
+- guard: median 21.8, p95 29.4
+- full_step: median 819.3, p95 974.0
 
-Resources: {"peak_python_mb": 9.5, "process_rss_mb": 115.8}
+Resources: {"peak_python_mb": 11.6, "process_rss_mb": 123.5}
 
 Gemini: skipped: no GEMINI_API_KEY in .env
 
-Cross-browser: "skipped in quick mode"
+Cross-browser: {"chromium": {"task_success_pct": 100.0, "leaks": 0}, "firefox": {"skipped": "Error"}, "webkit": {"task_success_pct": 100.0, "leaks": 0}}

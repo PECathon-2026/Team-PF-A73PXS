@@ -1,0 +1,26 @@
+{
+  "enabled": {
+    "CARD": true,
+    "AADHAAR": true,
+    "PAN": true,
+    "EMAIL": true,
+    "PHONE": true,
+    "OTP": true,
+    "PASSWORD": true,
+    "API_KEY": true,
+    "IP_ADDRESS": true,
+    "UPI": true,
+    "IFSC": true,
+    "CVV": true,
+    "NAME": true,
+    "ADDRESS": true,
+    "DOB": true,
+    "MEDICAL": true,
+    "ACCOUNT": true,
+    "EXPIRY": true,
+    "CUSTOM": true,
+    "FACE": true
+  },
+  "hints": {},
+  "custom": []
+}

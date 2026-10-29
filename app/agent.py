@@ -147,18 +147,20 @@ async def _step(session: Session, n: int) -> str:
 
 
 async def _act(session: Session, n: int, action: Action, result, raw, san) -> str:
-    element = next((e for e in raw.elements if e.id == action.target), None)
+    element = next((e for e in san.elements if e.id == action.target), None)
     label = (element.label or element.text) if element else ""
     kind = san.element_types.get(action.target, "")
     group = "payment" if kind in {"CARD", "CVV"} else kind
     session.narration = _narration(action, kind)
-    if result.needs_approval and group not in session._approved_groups:
+    remembered = action.action == "type" and group in session._approved_groups
+    if result.needs_approval and not remembered:
         question, why = _question(action, label, raw.page_text, session.vault, kind)
         session.emit(n, "approval", "asked the user")
         if not await session.ask(question, why):
             session.emit(n, "approval", "not approved")
             return "stopped by you"
-        session._approved_groups.add(group)
+        if action.action == "type":
+            session._approved_groups.add(group)
     await execute(session.page, action, raw, session.vault)
     session.history.append({"step": n, "action": action.action, "label": label, "value": action.value, "result": "ok"})
     session.emit(n, "execute", f"{action.action} {label}")
@@ -186,13 +188,17 @@ async def run(session: Session) -> None:
 
 
 async def _check_success(session: Session) -> bool:
-    data = await session.page.evaluate("({done: document.body.dataset.done, leak: document.body.dataset.leak})")
+    try:
+        data = await session.page.evaluate("({done: document.body.dataset.done, leak: document.body.dataset.leak})")
+    except Exception:
+        return False
     return data["done"] == "true" and data["leak"] != "true"
 
 
 async def leak_test(session: Session) -> bool:
     """Send a raw page, canary included, past the sanitizer. The guard must stop it."""
-    canary = sorted(session.vault.canaries)[0]
+    canary = "CANARY-LEAKTEST-0"
+    session.vault.canaries.add(canary)
     verdict = check_outbound(f"Leak test payload {canary}", session.vault, session.rules)
     if not verdict.allowed:
         session.block(0, "leak test: " + verdict.reason)

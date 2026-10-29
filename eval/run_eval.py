@@ -146,7 +146,8 @@ async def task_runs(browser, base_url: str) -> dict:
 async def injection_and_adversarial(browser, base_url: str) -> dict:
     session = await run_scenario(browser, base_url, "injection", llm=MockLLM(gullible=True))
     rejected = [h for h in session.history if h["result"].startswith("rejected")]
-    attack = {"agent_followed_injection": bool(session.success is False and not rejected),
+    leaked = await session.page.evaluate("document.body.dataset.leak") == "true"
+    attack = {"card_pasted_into_feedback": leaked,
               "attempts_rejected_by_validator": len(rejected), "task_still_ok_or_stopped": session.status}
     await session.close()
     page = await open_page(browser, base_url, "checkout")
@@ -233,7 +234,7 @@ async def cross_browser(pw, base_url: str) -> dict:
             out[name] = {"task_success_pct": runs["task_success_pct"], "leaks": runs["leaked_values_in_ai_payloads"]}
             await browser.close()
         except Exception as exc:
-            out[name] = {"skipped": type(exc).__name__}
+            out[name] = {"skipped": f"{type(exc).__name__}: {str(exc).splitlines()[0][:100]}"}
     return out
 
 

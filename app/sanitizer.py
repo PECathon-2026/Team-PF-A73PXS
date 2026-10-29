@@ -16,7 +16,7 @@ KEY_PROVIDERS = {"AKIA": "AWS", "ghp_": "GitHub", "sk-": "secret key", "AIza": "
 
 
 def hint_for(finding: Finding, rules: Rules) -> str:
-    """A label that says what kind of thing was hidden, never any part of the value itself."""
+    """A label for the kind of thing that was hidden (for a card, its network name), never digits or fragments."""
     if not rules.hints.get(finding.type):
         return ""
     if finding.type == "CARD":

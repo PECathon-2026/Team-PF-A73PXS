@@ -1,5 +1,5 @@
 {
-  "mode": "quick",
+  "mode": "full",
   "machine": {
     "platform": "Windows-11-10.0.26200-SP0",
     "cpus": 12,
@@ -160,29 +160,42 @@
   },
   "performance": {
     "snapshot": {
-      "median_ms": 238.3,
-      "p95_ms": 358.4
+      "median_ms": 123.8,
+      "p95_ms": 179.3
     },
     "detect": {
-      "median_ms": 3.6,
-      "p95_ms": 4.9
+      "median_ms": 2.3,
+      "p95_ms": 3.6
     },
     "sanitize": {
-      "median_ms": 221.5,
-      "p95_ms": 278.0
+      "median_ms": 140.0,
+      "p95_ms": 193.1
     },
     "guard": {
-      "median_ms": 32.1,
-      "p95_ms": 44.3
+      "median_ms": 21.8,
+      "p95_ms": 29.4
     },
     "full_step": {
-      "median_ms": 1137.5,
-      "p95_ms": 1487.4
+      "median_ms": 819.3,
+      "p95_ms": 974.0
     }
   },
   "resources": {
-    "peak_python_mb": 9.5,
-    "process_rss_mb": 115.8
+    "peak_python_mb": 11.6,
+    "process_rss_mb": 123.5
   },
-  "gemini": "skipped: no GEMINI_API_KEY in .env"
+  "gemini": "skipped: no GEMINI_API_KEY in .env",
+  "cross_browser": {
+    "chromium": {
+      "task_success_pct": 100.0,
+      "leaks": 0
+    },
+    "firefox": {
+      "skipped": "Error"
+    },
+    "webkit": {
+      "task_success_pct": 100.0,
+      "leaks": 0
+    }
+  }
 }

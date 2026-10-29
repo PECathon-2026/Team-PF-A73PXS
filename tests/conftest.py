@@ -16,3 +16,8 @@ def base_url():
     threading.Thread(target=server.serve_forever, daemon=True).start()
     yield f"http://127.0.0.1:{server.server_port}"
     server.shutdown()
+
+
+def pytest_collection_modifyitems(items):
+    # Playwright's sync API (acceptance tests) keeps an event loop alive that breaks later asyncio.run calls.
+    items.sort(key=lambda item: item.fspath.basename == "test_acceptance.py")
