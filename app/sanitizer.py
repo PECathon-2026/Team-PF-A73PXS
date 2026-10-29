@@ -61,11 +61,12 @@ def _blackout(png: bytes, boxes: list[tuple[float, float, float, float]]) -> byt
 
 
 def _sensitive_boxes(snap: Snapshot, rules: Rules, changed: set[str]) -> list[tuple[float, float, float, float]]:
-    """Text found sensitive, plus whole elements whose content cannot be checked (frames, canvases, video)."""
-    boxes = [box for _, box in snap.text_boxes]
+    """Text found sensitive, plus whole elements whose content cannot be checked (frames, canvases, video).
+    Kinds the user shares get no box; frames, canvases and video are always covered."""
+    boxes = [box for type_, box in snap.text_boxes if rules.on(type_)]
     for e in snap.elements:
-        structural = e.sensitive_type and (e.value or (e.text and not e.can_type))
-        person = e.tag == "img" and PERSON_IMAGE.search(e.label)
+        structural = e.sensitive_type and rules.on(e.sensitive_type) and (e.value or (e.text and not e.can_type))
+        person = rules.on("FACE") and e.tag == "img" and PERSON_IMAGE.search(e.label)
         if structural or person or e.id in changed or e.tag in WHOLE_BOX_TAGS:
             boxes.append(e.box)
     if rules.on("FACE"):

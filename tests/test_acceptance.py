@@ -15,7 +15,12 @@ RULES = ROOT / "config" / "rules.json"
 SCREENS = ROOT / "docs" / "screens"
 VIEWPORTS = {"375x812": (375, 812), "1440x900": (1440, 900)}
 FORBIDDEN = re.compile(r"redacted|guard|payload|llm|token", re.I)
-MAIN_CONTROLS = {"task", "Go", "chip", "switch", "status", "How it works"}
+MAIN_CONTROLS = {"task", "Go", "chip", "switch", "status", "How it works", "Privacy choices"}
+FRIENDLY = {"AADHAAR": "Aadhaar number", "PAN": "PAN number", "NAME": "name", "DOB": "date of birth",
+            "ADDRESS": "address", "CARD": "card number", "CVV": "card security code", "EXPIRY": "card expiry",
+            "UPI": "UPI address", "IFSC": "bank code (IFSC)", "ACCOUNT": "account number", "PASSWORD": "password",
+            "OTP": "one-time code", "API_KEY": "API keys and secret keys", "EMAIL": "email", "PHONE": "phone",
+            "IP_ADDRESS": "IP address", "MEDICAL": "health details", "FACE": "faces", "CUSTOM": "saved detail"}
 
 JS_CONTROLS = """() => [...document.querySelectorAll('#main button, #main input, #main a')].map(e => {
   const box = (e.id === 'ai-view' ? e.closest('label') : e).getBoundingClientRect();
@@ -273,14 +278,14 @@ def test_user_rules_apply_on_the_next_run(solo, base):
     try:
         baseline = run_scenario(solo, base, "Ask support")
         assert any(h["type"] == "EMAIL" for h in baseline["hidden"])
-        saved = http_json(base + "/api/rules", "PUT", {"enabled": {"EMAIL": False}, "custom": ["Falcon"]})
-        assert saved["enabled"]["EMAIL"] is False and saved["custom"] == ["Falcon"]
+        saved = http_json(base + "/api/rules", "PUT", {"modes": {"EMAIL": "reveal"}, "custom": ["Falcon"]})
+        assert saved["modes"]["EMAIL"] == "reveal" and saved["custom"] == ["Falcon"]
         assert http_json(base + "/api/rules")["custom"] == ["Falcon"]
         after = run_scenario(solo, base, "Ask support")
         # Values saved in the profile are always hidden by exact match, so only pattern hits follow the toggle.
         assert not any(h["type"] == "EMAIL" and h["source"] != "context" for h in after["hidden"])
     finally:
-        http_json(base + "/api/rules", "PUT", {"enabled": original["enabled"], "hints": original["hints"],
+        http_json(base + "/api/rules", "PUT", {"modes": original["modes"], "hints": original["hints"],
                                                 "custom": original["custom"]})
 
 
@@ -303,7 +308,44 @@ def test_how_it_works_view(solo, base):
     expect(panel.locator(".steps li").first).to_be_visible()
     expect(panel.locator(".mono").first).not_to_be_empty()
     expect(panel.locator(".list li").first).to_contain_text(re.compile("execute|approval|validate"))
-    expect(panel.locator(".rules .rule").first).to_be_visible()
+    expect(panel.locator(".summary")).to_contain_text(re.compile(r"Hide: \d+ · Ask permission: \d+ · Reveal: \d+"))
+    expect(panel.get_by_role("button", name="Open Privacy choices")).to_be_visible()
     expect(panel.locator("input[name=ai]")).to_have_count(3)
     expect(panel.get_by_role("button", name="Run leak test")).to_be_visible()
     solo.screenshot(path=str(SCREENS / "14_how_1440x900_light.png"))
+
+
+def test_hidden_banner_names_new_items(solo, base):
+    start_run(solo, base, "Pay for my cart")
+    banner, seen = solo.locator("#hidden-banner .banner.is-shown"), []
+    deadline = time.time() + 90
+    while time.time() < deadline:
+        if banner.count():
+            seen.append(solo.locator(".banner-title").inner_text())
+            assert not FORBIDDEN.search(solo.inner_text("body"))
+        s = http_json(base + "/api/session")
+        if s["status"] in ("done", "blocked"):
+            break
+        if s["approval"] and solo.locator("#approval").is_visible():
+            solo.locator("#approve").click()
+        time.sleep(0.2)
+    assert seen, "no banner appeared during the run"
+    names = {n.lower() for n in (FRIENDLY[h["type"]] for h in s["hidden"])}
+    for text in seen:
+        match = re.fullmatch(r"(\d+) things hidden|(.+) hidden", text)
+        assert match, text
+        if match.group(2):
+            listed = re.split(r", | and ", match.group(2).lower())
+            assert len(listed) <= 3 and set(listed) <= names, (text, names)
+    expect(solo.locator("#hidden-banner")).to_have_attribute("role", "status")
+
+
+def test_hidden_banner_stays_quiet_for_items_hidden_before_load(solo, base):
+    if not http_json(base + "/api/session").get("hidden"):
+        run_scenario(solo, base, "Ask support")
+    late = solo.context.new_page()
+    late.set_viewport_size({"width": 375, "height": 812})
+    late.goto(base)
+    late.wait_for_selector(".chip")
+    late.wait_for_timeout(2000)
+    assert late.locator("#hidden-banner").count() == 0

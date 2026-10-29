@@ -21,7 +21,7 @@ from playwright.async_api import async_playwright
 
 from app import agent
 from app.executor import LOCAL_HOSTS
-from app.rules import ALL_TYPES, Rules, load_rules, save_rules
+from app.rules import ALL_TYPES, Rules, is_mode_map, load_rules, save_rules
 from app.runner import task_for
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -154,7 +154,7 @@ def session_state():
         "id": s.id, "scenario": s.scenario, "task": s.task, "status": s.status, "narration": s.narration,
         "success": s.success, "approval": s.approval, "size": _png_size(s.real_png), "boxes": s.boxes,
         "hidden": [vars(r) for r in s.report.values()], "blocked": s.blocked,
-        "events": [vars(e) for e in s.events], "ai": s.llm.name,
+        "events": [vars(e) for e in s.events], "ai": s.llm.name, "shared": s.shared(),
     }
 
 
@@ -220,19 +220,27 @@ def _is_switch_map(value) -> bool:
     return isinstance(value, dict) and all(k in ALL_TYPES and isinstance(v, bool) for k, v in value.items())
 
 
+def _check_modes(modes) -> None:
+    if not is_mode_map(modes):
+        raise HTTPException(400, "Each kind of data must be set to redact, ask or reveal.")
+    if modes.get("CUSTOM", "redact") != "redact":
+        raise HTTPException(400, "Always hide rules always stay hidden.")
+
+
 @app.put("/api/rules")
 def put_rules(request: Request, body: dict = Body(...)):
     local_only(request)
     custom = body.get("custom", state.rules.custom)
-    enabled, hints = body.get("enabled", {}), body.get("hints", {})
+    modes, hints = body.get("modes", {}), body.get("hints", {})
     if not isinstance(custom, list) or not all(isinstance(c, str) for c in custom):
         raise HTTPException(400, "Always hide rules must be a list of text patterns.")
-    for switches in (enabled, hints):
-        if not _is_switch_map(switches):
-            raise HTTPException(400, "Switches must map a known kind of data to on or off.")
+    _check_modes(modes)
+    if not _is_switch_map(hints):
+        raise HTTPException(400, "Switches must map a known kind of data to on or off.")
     for pattern in custom:
         _check_pattern(pattern)
-    state.rules.enabled.update(enabled)
+    # Updated in place: a running task reads these rules at the start of every step.
+    state.rules.modes.update(modes)
     state.rules.hints.update(hints)
     state.rules.custom = [c for c in custom if c.strip()]
     save_rules(state.rules)

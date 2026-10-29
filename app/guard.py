@@ -2,7 +2,7 @@ import re
 
 from app.detectors import compact, compact_value, find_sensitive, normalize
 from app.models import GuardResult
-from app.rules import Rules
+from app.rules import ALL_TYPES, Rules
 from app.vault import Vault
 
 # Three length cut-offs on purpose: below SHORT the guard needs whole-word matches so it does not block ids and
@@ -33,22 +33,26 @@ def _contains(value: str, text: str, flat: str) -> bool:
     return value in text or (len(needle) >= SHORT and needle in flat)
 
 
-def _leaked_value(texts: list[str], vault: Vault) -> bool:
+def _leaked_value(texts: list[str], values: list[str]) -> bool:
     for text in texts:
         flat = compact(text)[0]
-        if any(value and _contains(value, text, flat) for value in vault.values()):
+        if any(value and _contains(value, text, flat) for value in values):
             return True
     return False
 
 
 def check_outbound(payload: str, vault: Vault, rules: Rules | None = None) -> GuardResult:
-    """Last check before anything leaves the machine. Any failure inside it blocks the payload."""
+    """Last check before anything leaves the machine. Any failure inside it blocks the payload.
+    Only kinds of data the user chose to share (mode reveal) may pass; canaries never do."""
     try:
+        rules = rules or Rules()
         plain = decoded(payload)
-        if _leaked_value([normalize(payload)[0], normalize(plain)[0]], vault):
+        shared = {t for t in ALL_TYPES if not rules.on(t)}
+        if _leaked_value([normalize(payload)[0], normalize(plain)[0]], vault.values(skip_types=shared)):
             return GuardResult(False, "a hidden value was about to be sent")
-        # Fresh Rules: every type, custom rules included, is scanned even if the user switched it off.
-        scan = Rules(custom=rules.custom if rules else [])
+        # Fresh Rules: hints do not matter here, and shared kinds are left out of the scan rather than
+        # filtered afterwards, so a shared match can never win an overlap against a hidden one.
+        scan = Rules(custom=rules.custom).with_shared(shared)
         for f in find_sensitive(plain, scan):
             if f.source == "pattern":
                 return GuardResult(False, f"unhidden {f.type.lower().replace('_', ' ')} found in the message")

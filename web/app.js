@@ -12,6 +12,21 @@ const STATUS_WORDS = {
   idle: "Getting ready", running: "Working on it", waiting: "Waiting for your OK",
   done: "All done", blocked: "Stopped to keep you safe",
 };
+// Privacy choices: one three-way choice per kind of private data, grouped the way people think about it.
+const MODES = [["redact", "Hide"], ["ask", "Ask permission"], ["reveal", "Reveal"]];
+const CHOICE_GROUPS = [
+  ["Identity", [["AADHAAR", "Aadhaar number"], ["PAN", "PAN number"], ["NAME", "name"], ["DOB", "date of birth"],
+    ["ADDRESS", "address"]]],
+  ["Payments", [["CARD", "card number"], ["CVV", "card security code"], ["EXPIRY", "card expiry"],
+    ["UPI", "UPI address"], ["IFSC", "bank code (IFSC)"], ["ACCOUNT", "account number"]]],
+  ["Login", [["PASSWORD", "password"], ["OTP", "one-time code"], ["API_KEY", "API keys and secret keys"]]],
+  ["Contact", [["EMAIL", "email"], ["PHONE", "phone"]]],
+  ["Other", [["IP_ADDRESS", "IP address"], ["MEDICAL", "health details"], ["FACE", "faces"]]],
+];
+const CHOICE_NAMES = Object.fromEntries(CHOICE_GROUPS.flatMap(([, rows]) => rows));
+const SAVED = "Saved. Applies from the next step.";
+const LOCAL_ONLY = "Privacy choices can only be changed on the computer running PrivacyLens.";
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, ...kids) => {
@@ -20,7 +35,12 @@ const el = (tag, props = {}, ...kids) => {
   return node;
 };
 
-const app = { state: { id: null }, scenario: null, imageKey: "", lastFocus: null, panel: null };
+const app = {
+  state: { id: null }, scenario: null, imageKey: "", lastFocus: null, panel: null,
+  rules: { modes: {}, hints: {}, custom: [] }, choices: null,
+  seen: null, bannerQueue: [], bannerTimer: 0,
+};
+const BANNER_MS = 3500;
 
 async function api(path, options = {}) {
   const init = { ...options };
@@ -29,12 +49,20 @@ async function api(path, options = {}) {
     init.body = JSON.stringify(options.body);
   }
   const res = await fetch(path, init);
-  if (!res.ok) throw new Error(`${path}: ${res.status}`);
+  if (!res.ok) {
+    const error = new Error(`${path}: ${res.status}`);
+    const body = await res.json().catch(() => ({}));
+    error.status = res.status;
+    error.detail = typeof body.detail === "string" ? body.detail : "";
+    throw error;
+  }
   return res.json();
 }
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const typeLabel = (type) => TYPE_LABELS[type] || type.toLowerCase().replace(/_/g, " ");
+const capitalize = (text) => text.charAt(0).toUpperCase() + text.slice(1);
+const choiceName = (type) => CHOICE_NAMES[type] || typeLabel(type).toLowerCase();
 
 async function loadScenarios() {
   const scenarios = await api("/api/scenarios");
@@ -70,7 +98,15 @@ async function startTask(event) {
 
 function statusText(s) {
   if (s.blocked.length) return `Stopped ${plural(s.blocked.length, "unsafe message", "unsafe messages")}`;
-  return `${plural(s.hidden.length, "thing", "things")} hidden · nothing private shared`;
+  const hidden = `${plural(s.hidden.length, "thing", "things")} hidden`;
+  const shared = s.shared || [];
+  if (!shared.length) return `${hidden} · nothing private shared`;
+  const names = (byApproval) => [...new Set(shared.filter((x) => (x.by === "approval") === byApproval)
+    .map((x) => choiceName(x.type)))];
+  const groups = [[names(false), "shared by your choice"], [names(true), "shared with your permission"]]
+    .filter(([list]) => list.length)
+    .map(([list, words]) => `${capitalize(list.join(", "))} ${words}`);
+  return [hidden, ...groups].join(" · ");
 }
 
 function renderMain(s) {
@@ -172,10 +208,14 @@ function showStatusDetails() {
 function syncApproval(approval) {
   if (!approval) return closeSheet("approval");
   if (!$("approval").hidden) return;
+  const share = approval.kind === "share";
+  $("approve").textContent = share ? "Allow for this task" : "Approve";
+  $("cancel").textContent = share ? "Do not share" : "Cancel";
   $("approval-q").textContent = approval.question;
   $("why").textContent = approval.why;
   $("why").hidden = true;
   $("why-link").setAttribute("aria-expanded", "false");
+  hideBanner();
   openSheet("approval", $("approve"));
 }
 
@@ -190,10 +230,89 @@ function toggleWhy() {
   $("why-link").setAttribute("aria-expanded", String(!why.hidden));
 }
 
+/* Hidden-item banner: a quiet note at the top whenever something new is hidden during a run */
+
+function noticeHidden(s) {
+  const key = (item) => `${s.id}:${item.placeholder || item.type}`;
+  const items = s.id ? s.hidden || [] : [];
+  // The first poll only learns what is already hidden, so a reload or a joining phone stays quiet.
+  if (!app.seen) {
+    app.seen = new Set(items.map(key));
+    return;
+  }
+  items.filter((item) => !app.seen.has(key(item))).forEach((item) => {
+    app.seen.add(key(item));
+    app.bannerQueue.push(item);
+  });
+  const busy = !$("approval").hidden || !$("status-sheet").hidden || app.panel || app.choices;
+  if (app.bannerQueue.length && !busy) {
+    showBanner(app.bannerQueue);
+    app.bannerQueue = [];
+  }
+}
+
+function bannerText(items) {
+  if (items.length > 3) return `${items.length} things hidden`;
+  const names = [...new Set(items.map((item) => choiceName(item.type)))];
+  const list = names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0];
+  return `${capitalize(list)} hidden`;
+}
+
+function bannerElement() {
+  if ($("hidden-banner")) return $("hidden-banner");
+  const svgNs = "http://www.w3.org/2000/svg";
+  const icon = document.createElementNS(svgNs, "svg");
+  icon.setAttribute("viewBox", "0 0 24 24");
+  icon.setAttribute("aria-hidden", "true");
+  icon.classList.add("banner-icon");
+  const shield = document.createElementNS(svgNs, "path");
+  shield.setAttribute("d", "M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Z");
+  icon.append(shield);
+  const button = el("button", { type: "button", className: "banner" }, icon,
+    el("span", { className: "banner-text" }, el("strong", { className: "banner-title" }),
+      el("span", { className: "banner-sub", textContent: "Kept on this device" })));
+  button.addEventListener("click", () => { hideBanner(); showStatusDetails(); });
+  const pause = () => clearTimeout(app.bannerTimer);
+  const resume = () => {
+    if (button.matches(":hover") || button.contains(document.activeElement)) return;
+    app.bannerTimer = setTimeout(hideBanner, BANNER_MS);
+  };
+  button.addEventListener("mouseenter", pause);
+  button.addEventListener("focus", pause);
+  button.addEventListener("mouseleave", resume);
+  button.addEventListener("blur", resume);
+  const wrap = el("div", { id: "hidden-banner", className: "banner-wrap" }, button);
+  wrap.setAttribute("role", "status");
+  wrap.setAttribute("aria-live", "polite");
+  document.body.append(wrap);
+  return wrap;
+}
+
+function showBanner(items) {
+  const wrap = bannerElement();
+  const button = wrap.querySelector(".banner");
+  // Wait a frame so a freshly created live region is in place before its text changes.
+  requestAnimationFrame(() => {
+    wrap.querySelector(".banner-title").textContent = bannerText(items);
+    button.classList.add("is-shown");
+    clearTimeout(app.bannerTimer);
+    if (!button.matches(":hover") && !button.contains(document.activeElement)) {
+      app.bannerTimer = setTimeout(hideBanner, BANNER_MS);
+    }
+  });
+}
+
+function hideBanner() {
+  clearTimeout(app.bannerTimer);
+  const button = $("hidden-banner") && $("hidden-banner").querySelector(".banner");
+  if (button) button.classList.remove("is-shown");
+}
+
 async function poll() {
   try {
     app.state = await api("/api/session");
     renderMain(app.state);
+    noticeHidden(app.state);
     if (app.panel) await refreshPanel();
   } catch {
     $("narration").textContent = "Lost connection. Retrying...";
@@ -236,8 +355,7 @@ function openPanel() {
         el("div", {}, el("strong", { textContent: "Outbound text sent to the LLM" }), parts.outbound))),
       card("Validation and approval decisions", parts.decisions),
       card("Evaluation", parts.evalBody),
-      card("Privacy settings", el("p", { className: "note", textContent: "Changes take effect on the next step." }),
-        parts.rules),
+      card("Privacy settings", parts.rules),
       card("AI choice", parts.ai),
       card("Leak test", leakTestControls())));
   panel.setAttribute("role", "dialog");
@@ -299,47 +417,225 @@ async function loadEval(run = false) {
 }
 
 async function loadSettings() {
-  const [config, rules] = await Promise.all([api("/api/config"), api("/api/rules")]);
+  const [config, rules] = await Promise.all([api("/api/config"), api("/api/rules").catch(() => null)]);
   if (!app.panel) return;
-  renderRules(config.types, rules);
+  if (rules) app.rules = normalizeRules(rules);
+  renderRulesSummary();
   renderAiChoice(config);
 }
 
-const saveRules = (rules) => api("/api/rules", { method: "PUT", body: rules });
+/* Privacy choices */
 
-function renderRules(types, rules) {
-  const grid = el("div", { className: "rules" });
-  types.forEach((type) => {
-    const on = el("input", { type: "checkbox", checked: rules.enabled[type] !== false, id: `rule-${type}` });
-    const hint = el("input", { type: "checkbox", checked: !!rules.hints[type] });
-    on.addEventListener("change", () => { rules.enabled[type] = on.checked; saveRules(rules); });
-    hint.addEventListener("change", () => { rules.hints[type] = hint.checked; saveRules(rules); });
-    grid.append(el("div", { className: "rule" },
-      on, el("label", { htmlFor: on.id, textContent: `${typeLabel(type)} (${type})` }),
-      el("label", { className: "hint" }, hint, "hint")));
+function normalizeRules(rules) {
+  return {
+    modes: rules && typeof rules.modes === "object" && rules.modes ? rules.modes : {},
+    hints: (rules && rules.hints) || {},
+    custom: rules && Array.isArray(rules.custom) ? rules.custom : [],
+  };
+}
+
+const modeOf = (type) => (MODES.some(([value]) => value === app.rules.modes[type]) ? app.rules.modes[type] : "ask");
+const saveRules = async (change) => { app.rules = normalizeRules(await api("/api/rules", { method: "PUT", body: change })); };
+const choicesAllowed = () => LOCAL_HOSTS.has(location.hostname);
+
+// Phones may watch and approve, but settings stay on the computer: hide the link rather than fail.
+function lockChoices() {
+  $("choices-link").hidden = true;
+}
+
+async function loadRules() {
+  if (!choicesAllowed()) return lockChoices();
+  $("choices-link").hidden = false;
+  try {
+    app.rules = normalizeRules(await api("/api/rules"));
+  } catch (error) {
+    if (error.status === 403) lockChoices();
+  }
+}
+
+function renderRulesSummary() {
+  if (!app.panel) return;
+  const counts = { redact: 0, ask: 0, reveal: 0 };
+  Object.keys(CHOICE_NAMES).forEach((type) => { counts[modeOf(type)] += 1; });
+  const open = el("button", { type: "button", className: "secondary", textContent: "Open Privacy choices" });
+  open.disabled = $("choices-link").hidden;
+  open.addEventListener("click", openChoices);
+  const custom = app.rules.custom.length;
+  app.panel.rules.replaceChildren(
+    el("p", { className: "summary",
+      textContent: `Hide: ${counts.redact} · Ask permission: ${counts.ask} · Reveal: ${counts.reveal}` }),
+    el("p", { className: "note", textContent: custom
+      ? `Plus ${plural(custom, "rule", "rules")} of your own that always hide.` : "No rules of your own yet." }),
+    open);
+}
+
+function setBackgroundInert(on) {
+  $("main").inert = on || !!$("how");
+  if ($("how")) $("how").inert = on;
+}
+
+async function openChoices() {
+  if ($("choices")) return;
+  app.choicesFocus = document.activeElement;
+  const done = el("button", { type: "button", className: "secondary", textContent: "Done" });
+  done.addEventListener("click", closeChoices);
+  const saved = el("p", { className: "saved" });
+  saved.setAttribute("role", "status");
+  saved.setAttribute("aria-live", "polite");
+  const body = el("div", { className: "choices-body" }, el("p", { className: "note", textContent: "Loading..." }));
+  const sheet = el("div", { className: "choices-sheet" },
+    el("div", { className: "choices-head" }, el("h2", { id: "choices-title", textContent: "Privacy choices" }), done),
+    saved, body);
+  sheet.setAttribute("role", "dialog");
+  sheet.setAttribute("aria-modal", "true");
+  sheet.setAttribute("aria-labelledby", "choices-title");
+  const overlay = el("div", { className: "choices", id: "choices" }, sheet);
+  overlay.addEventListener("keydown", (e) => { if (e.key === "Escape") closeChoices(); });
+  document.body.append(overlay);
+  setBackgroundInert(true);
+  app.choices = { overlay, sheet, body, saved };
+  done.focus();
+  try {
+    app.rules = normalizeRules(await api("/api/rules"));
+  } catch (error) {
+    if (!app.choices) return;
+    if (error.status === 403) lockChoices();
+    body.replaceChildren(el("p", { className: "note",
+      textContent: error.status === 403 ? LOCAL_ONLY : "Could not load your choices. Please try again." }));
+    return;
+  }
+  if (app.choices) renderChoices();
+}
+
+function closeChoices() {
+  if (!app.choices) return;
+  app.choices.overlay.remove();
+  app.choices = null;
+  setBackgroundInert(false);
+  renderRulesSummary();
+  const back = app.choicesFocus;
+  if (back && document.contains(back)) back.focus();
+  // The summary was redrawn, so return to its fresh "Open Privacy choices" button.
+  else if (app.panel) app.panel.rules.querySelector("button").focus();
+}
+
+function say(text) {
+  if (!app.choices) return;
+  const box = app.choices.saved;
+  box.textContent = "";
+  // Clearing first makes screen readers announce a repeated message again.
+  requestAnimationFrame(() => { box.textContent = text; });
+}
+
+function renderChoices() {
+  const intro = el("p", { className: "choices-intro" },
+    el("strong", { textContent: "Hide:" }), " the AI never sees it. ",
+    el("strong", { textContent: "Ask permission (default):" }), " hidden unless the AI needs it and you say yes, for that task only. ",
+    el("strong", { textContent: "Reveal:" }), " the AI can read it.");
+  const groups = CHOICE_GROUPS.map(([title, rows]) =>
+    card(title, ...rows.map(([type, name]) => choiceRow(type, name))));
+  app.choices.body.replaceChildren(intro, ...groups, customRules());
+}
+
+function choiceRow(type, name) {
+  const labelId = `choice-${type}`;
+  const group = el("div", { className: "seg" });
+  group.setAttribute("role", "radiogroup");
+  group.setAttribute("aria-labelledby", labelId);
+  MODES.forEach(([value, text]) => {
+    const input = el("input", { type: "radio", name: `mode-${type}`, value, checked: modeOf(type) === value });
+    input.addEventListener("change", () => pickMode(type, name, input, group));
+    group.append(el("label", { className: `seg-${value}` }, input, el("span", { textContent: text })));
   });
+  return el("div", { className: "choice" },
+    el("span", { className: "choice-name", id: labelId, textContent: capitalize(name) }), group);
+}
 
-  const tags = el("div", { className: "row" });
-  const drawTags = () => tags.replaceChildren(...rules.custom.map((pattern, i) => {
-    const remove = el("button", { type: "button", textContent: "x", ariaLabel: `Remove ${pattern}` });
-    remove.addEventListener("click", async () => { rules.custom.splice(i, 1); await saveRules(rules); drawTags(); });
-    return el("span", { className: "tag" }, pattern, remove);
+function syncRow(type, group) {
+  group.querySelector(`input[value="${modeOf(type)}"]`).checked = true;
+}
+
+async function pickMode(type, name, input, group) {
+  const restore = () => { syncRow(type, group); group.querySelector("input:checked").focus(); };
+  if (input.value === "reveal" && !(await confirmReveal(name))) return restore();
+  try {
+    await saveRules({ modes: { [type]: input.value } });
+    if (!(type in app.rules.modes)) throw new Error("choice not saved");
+    syncRow(type, group);
+    say(SAVED);
+  } catch (error) {
+    if (error.status === 403) lockChoices();
+    if (app.choices) restore();
+    say(error.status === 403 ? LOCAL_ONLY : "Could not save that choice. Please try again.");
+  }
+}
+
+function confirmReveal(name) {
+  return new Promise((resolve) => {
+    const cancel = el("button", { type: "button", className: "secondary", textContent: "Cancel" });
+    const reveal = el("button", { type: "button", className: "primary danger", textContent: "Reveal" });
+    const box = el("div", { className: "sheet" },
+      el("h2", { id: "confirm-q", textContent: `The AI service will be able to read your ${name}. Continue?` }),
+      el("div", { className: "confirm-actions" }, cancel, reveal));
+    box.setAttribute("role", "alertdialog");
+    box.setAttribute("aria-modal", "true");
+    box.setAttribute("aria-labelledby", "confirm-q");
+    const back = el("div", { className: "confirm-back" }, box);
+    const returnTo = document.activeElement;
+    const finish = (yes) => {
+      back.remove();
+      app.choices.sheet.inert = false;
+      if (yes && returnTo) returnTo.focus();
+      resolve(yes);
+    };
+    cancel.addEventListener("click", () => finish(false));
+    reveal.addEventListener("click", () => finish(true));
+    back.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { e.stopPropagation(); finish(false); }
+      if (e.key === "Tab") { e.preventDefault(); (document.activeElement === cancel ? reveal : cancel).focus(); }
+    });
+    app.choices.overlay.append(back);
+    app.choices.sheet.inert = true;
+    cancel.focus();
+  });
+}
+
+function customRules() {
+  const input = el("input", { type: "text", id: "custom-rule", placeholder: "e.g. ORD-\\d{6}", autocomplete: "off" });
+  const error = el("p", { className: "error" });
+  error.setAttribute("role", "alert");
+  const tags = el("ul", { className: "tags", ariaLabel: "Your rules" });
+  const save = async (custom) => {
+    error.textContent = "";
+    try {
+      await saveRules({ custom });
+      drawTags();
+      say(SAVED);
+      return true;
+    } catch (err) {
+      if (err.status === 403) lockChoices();
+      error.textContent = err.detail || (err.status === 403 ? LOCAL_ONLY : "Could not save that rule. Please try again.");
+      return false;
+    }
+  };
+  const drawTags = () => tags.replaceChildren(...app.rules.custom.map((pattern, i) => {
+    const remove = el("button", { type: "button", className: "link", textContent: "Remove" });
+    remove.setAttribute("aria-label", `Remove ${pattern}`);
+    remove.addEventListener("click", () => save(app.rules.custom.filter((_, j) => j !== i)));
+    return el("li", { className: "tag" }, el("span", { textContent: pattern }), remove);
   }));
-  const input = el("input", { type: "text", id: "custom-rule", placeholder: "e.g. ORD-\\d{6}" });
   const form = el("form", { className: "row" },
-    el("label", { htmlFor: input.id, textContent: "Always hide..." }), input,
+    el("label", { htmlFor: input.id, className: "rule-label", textContent: "Always hide..." }), input,
     el("button", { type: "submit", className: "secondary", textContent: "Add" }));
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const pattern = input.value.trim();
-    if (!pattern) return;
-    rules.custom.push(pattern);
-    input.value = "";
-    await saveRules(rules);
-    drawTags();
+    if (pattern && await save([...app.rules.custom, pattern])) input.value = "";
   });
   drawTags();
-  app.panel.rules.replaceChildren(grid, form, tags);
+  return card("Your own rules",
+    el("p", { className: "note", textContent: "Anything that matches is always hidden, whatever you picked above." }),
+    form, error, tags);
 }
 
 function renderAiChoice(config) {
@@ -390,10 +686,12 @@ function init() {
   $("cancel").addEventListener("click", () => answer(false));
   $("why-link").addEventListener("click", toggleWhy);
   $("how-link").addEventListener("click", openPanel);
+  $("choices-link").addEventListener("click", openChoices);
   document.addEventListener("keydown", trapFocus);
   $("img-real").addEventListener("load", () => drawFrost(app.state));
   window.addEventListener("resize", () => drawFrost(app.state));
   loadScenarios().catch(() => {});
+  loadRules();
   poll();
 }
 

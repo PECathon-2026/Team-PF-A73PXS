@@ -1,5 +1,4 @@
 import asyncio
-import re
 import traceback
 import uuid
 from pathlib import Path
@@ -13,11 +12,12 @@ from app.llm import LLMError, RecordingLLM, get_llm
 from app.models import Action, AuditEvent, ReportItem, SanitizedSnapshot, Snapshot, ValidationResult
 from app.profile import load_canaries_into_vault, load_profile_into_vault
 from app.prompts import SYSTEM_PROMPT, build_observation
-from app.rules import Rules
+from app.rules import ALL_TYPES, TYPE_NAMES, Rules
 from app.sanitizer import sanitize
 from app.scrub import scrub
 from app.validator import parse_action, validate
-from app.vault import Vault
+from app.vault import TOKEN, Vault, token_type
+from app.wording import action_question, narration, share_question
 
 STEP_BUDGET = 12
 HISTORY_CHARS = 200
@@ -27,13 +27,8 @@ SCENARIO_FILES = {
     "checkout": "01_checkout.html", "login": "02_login_otp.html", "support": "03_support_chat.html",
     "video": "04_video_call.html", "developer": "05_dev_settings.html", "injection": "06_injection.html",
 }
-HUMAN_FIELD = {"CARD": "your card number", "CVV": "the card security code", "EXPIRY": "the card expiry",
-               "PASSWORD": "your password", "OTP": "the one-time code", "EMAIL": "your email", "PHONE": "your phone",
-               "NAME": "your name", "ADDRESS": "your address"}
-TECHNICAL = re.compile(r"redacted|guard|payload|llm|token", re.I)
 TRACE_FRAMES = 3
 LEAK_CANARY = "CANARY-LEAKTEST-0"
-SECRET_WORDS = {"CARD": "card number", "CVV": "card security code", "PASSWORD": "password", "OTP": "one-time code"}
 ASK_FIRST_REJECTED = ("The secrets list and the visible page are everything you get. Take the next visible step "
                       "yourself; ask_user again only if no step can move the task forward.")
 
@@ -61,6 +56,8 @@ class Session:
         self.approval_answer: bool | None = None
         self._answered = asyncio.Event()
         self.approved_groups: set[str] = set()
+        # Kinds the user approved for sharing during this task only; never saved.
+        self.shared_types: set[str] = set()
         self.page = self.context = None
 
     def emit(self, step: int, kind: str, detail: str) -> None:
@@ -96,8 +93,14 @@ class Session:
             await self.context.close()
         self.vault.clear()
 
-    async def ask(self, question: str, why: str) -> bool:
-        self.approval = {"question": question, "why": why}
+    def shared(self) -> list[dict]:
+        """Kinds of data the AI may currently read, and whether the saved rules or an approval allowed it."""
+        by_choice = [{"type": t, "by": "choice"} for t in ALL_TYPES if self.rules.mode(t) == "reveal"]
+        chosen = {item["type"] for item in by_choice}
+        return by_choice + [{"type": t, "by": "approval"} for t in sorted(self.shared_types - chosen)]
+
+    async def ask(self, question: str, why: str, kind: str = "action") -> bool:
+        self.approval = {"question": question, "why": why, "kind": kind}
         self.approval_answer = None
         self._answered.clear()
         self.status = "waiting"
@@ -111,25 +114,7 @@ class Session:
         return bool(self.approval_answer)
 
 
-def _narration(action: Action, kind: str) -> str:
-    if action.action == "type":
-        return f"Filling in {HUMAN_FIELD.get(kind, 'a field')}..."
-    return "Pressing a button..." if action.action == "click" else "Looking at the page..."
-
-
-def _question(action: Action, label: str, raw_text: str, vault: Vault, kind: str) -> tuple[str, str]:
-    label = TECHNICAL.sub("item", label)
-    if kind in SECRET_WORDS and action.action == "type":
-        return f"Use your saved {SECRET_WORDS[kind]} for \"{label}\"?", "It fills in private details that stay on this device."
-    amount = re.search(r"(?:Rs\.?|INR)\s?[\d,]+", raw_text)
-    card = next((v for t, v, _ in vault.items() if t == "CARD"), "")
-    if re.search(r"\bpay\b", label, re.I):
-        parts = [f"Pay {amount.group()}" if amount else "Pay", f"with your card ending {card[-4:]}" if card else ""]
-        return " ".join(p for p in parts if p) + "?", "Paying cannot be undone."
-    return f"Go ahead and press \"{label}\"?", "This kind of step cannot easily be undone."
-
-
-def _check(action: Action | None, san: SanitizedSnapshot, session: Session) -> ValidationResult | None:
+def _check(action: Action | None, san: SanitizedSnapshot, session: Session, rules: Rules) -> ValidationResult | None:
     if action is None:
         return None
     if action.action == "done" and not any(h["result"] == "ok" for h in session.history):
@@ -137,21 +122,23 @@ def _check(action: Action | None, san: SanitizedSnapshot, session: Session) -> V
     # The first ask_user goes back to the AI: it usually means a value appears only after a later step.
     if action.action == "ask_user" and not any(h["action"] == "ask_user" for h in session.history):
         return ValidationResult(False, reason=ASK_FIRST_REJECTED)
-    return validate(action, san, session.vault)
+    return validate(action, san, session.vault, rules)
 
 
 async def _step(session: Session, n: int) -> str:
     """Run one step. Returns '' to continue, or the reason to stop."""
-    raw = await take_snapshot(session.page, session.rules, session.vault)
-    san = sanitize(raw, session.vault, session.rules)
+    # Read the saved rules every step, so a change in settings applies from the next step.
+    rules = session.rules.with_shared(session.shared_types)
+    raw = await take_snapshot(session.page, rules, session.vault)
+    san = sanitize(raw, session.vault, rules)
     session.real_png, session.ai_png, session.raw_text = raw.screenshot, san.screenshot, raw.page_text
     session.boxes = san.boxes
     session.report.update({r.placeholder: r for r in san.report})
     session.emit(n, "sanitize", f"{len(san.report)} items hidden")
 
-    observation = build_observation(session.task, san, session.vault, session.history)
+    observation = build_observation(session.task, san, session.vault, session.history, rules)
     session.outbound = SYSTEM_PROMPT + "\n" + observation
-    verdict = check_outbound(session.outbound, session.vault, session.rules)
+    verdict = check_outbound(session.outbound, session.vault, rules)
     if not verdict.allowed:
         session.block(n, verdict.reason)
         return "blocked"
@@ -159,7 +146,7 @@ async def _step(session: Session, n: int) -> str:
     reply = await asyncio.to_thread(session.llm.next_action, SYSTEM_PROMPT, observation)
     session.emit(n, "llm", f"the AI answered ({session.llm.model_used})")
     action = parse_action(reply)
-    result = _check(action, san, session)
+    result = _check(action, san, session, rules)
     if action is None or not result.ok:
         reason = result.reason if result else "The reply was not valid JSON."
         session.history.append({"step": n, "action": getattr(action, "action", "?"), "label": "", "value": "",
@@ -175,7 +162,24 @@ async def _step(session: Session, n: int) -> str:
     if action.action == "ask_user":
         session.emit(n, "ask", "the AI asked for help")
         return "the AI needs your help"
+    if action.action == "reveal":
+        return await _share(session, n, action, result)
     return await _act(session, n, action, result, raw, san)
+
+
+async def _share(session: Session, n: int, action: Action, result: ValidationResult) -> str:
+    """Let the AI read one kind of data for the rest of this task, if the user agrees."""
+    kind = token_type(TOKEN.fullmatch(action.value)[1])
+    name = TYPE_NAMES.get(kind, "private detail")
+    if result.needs_approval:
+        session.emit(n, "approval", f"asked the user to share their {name}")
+        if not await session.ask(*share_question(kind), kind="share"):
+            session.emit(n, "approval", "not approved")
+            return "stopped by you"
+        session.shared_types.add(kind)
+        session.emit(n, "approval", f"{name} shared for this task")
+    session.history.append({"step": n, "action": "reveal", "label": "", "value": action.value, "result": "ok"})
+    return ""
 
 
 async def _act(session: Session, n: int, action: Action, result: ValidationResult, raw: Snapshot,
@@ -184,10 +188,10 @@ async def _act(session: Session, n: int, action: Action, result: ValidationResul
     label = (element.label or element.text) if element else ""
     kind = san.element_types.get(action.target, "")
     group = "payment" if kind in {"CARD", "CVV"} else kind
-    session.narration = _narration(action, kind)
+    session.narration = narration(action, kind)
     remembered = action.action == "type" and group in session.approved_groups
     if result.needs_approval and not remembered:
-        question, why = _question(action, label, raw.page_text, session.vault, kind)
+        question, why = action_question(action, label, raw.page_text, session.vault, kind)
         session.emit(n, "approval", "asked the user")
         if not await session.ask(question, why):
             session.emit(n, "approval", "not approved")

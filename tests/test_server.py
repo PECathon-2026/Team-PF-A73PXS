@@ -33,8 +33,11 @@ def test_unknown_ai_is_a_400(fresh_state):
 @pytest.mark.parametrize("body", [
     {"custom": "Project Falcon"},
     {"custom": [1]},
-    {"enabled": {"NOT_A_TYPE": True}},
-    {"enabled": {"EMAIL": "no"}},
+    {"modes": {"NOT_A_TYPE": "ask"}},
+    {"modes": {"EMAIL": "no"}},
+    {"modes": {"EMAIL": True}},
+    {"modes": ["EMAIL"]},
+    {"modes": {"CUSTOM": "reveal"}},
     {"hints": ["CARD"]},
     {"hints": {"CARD": 1}},
 ])

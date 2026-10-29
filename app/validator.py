@@ -6,9 +6,10 @@ from urllib.parse import urlparse
 from app.detectors import ZERO_WIDTH, find_sensitive
 from app.models import Action, Element, SanitizedSnapshot, ValidationResult
 from app.executor import LOCAL_HOSTS
+from app.rules import Rules
 from app.vault import PLACEHOLDER, TOKEN, Vault, token_type
 
-ACTIONS = {"click", "type", "select", "scroll", "wait", "done", "ask_user"}
+ACTIONS = {"click", "type", "select", "scroll", "wait", "done", "ask_user", "reveal"}
 IRREVERSIBLE = re.compile(r"\b(pay|submit|send|delete|remove|confirm|purchase|place\s+order|transfer|rotate|verify)\b",
                           re.I)
 # Greek and Cyrillic letters that look like Latin ones, so a Greek Rho in "Pay" still reads as "Pay".
@@ -53,7 +54,7 @@ def _click_needs_approval(element: Element) -> bool:
     return element.is_submit and not any(c.isalnum() for c in label)
 
 
-def _check_value(action: Action, snap: SanitizedSnapshot, vault: Vault) -> ValidationResult | None:
+def _check_value(action: Action, snap: SanitizedSnapshot, vault: Vault, rules: Rules) -> ValidationResult | None:
     if PLACEHOLDER.search(action.value):
         return ValidationResult(False, reason="Use a {{TYPE#n}} token from the secrets list, not a placeholder.")
     kind = snap.element_types.get(action.target, "")
@@ -65,14 +66,29 @@ def _check_value(action: Action, snap: SanitizedSnapshot, vault: Vault) -> Valid
     literal = TOKEN.sub("", action.value)
     if _names_a_host(literal):
         return ValidationResult(False, reason="The value points outside this device.")
-    if any(f.source == "pattern" for f in find_sensitive(literal)):
+    # Kinds the user shares are not scanned, so the AI may type a value it was allowed to read.
+    if any(f.source == "pattern" for f in find_sensitive(literal, rules)):
         return ValidationResult(False, reason="The value looks like private data the AI should not know.")
     return None
 
 
-def validate(action: Action, snap: SanitizedSnapshot, vault: Vault) -> ValidationResult:
+def _check_reveal(action: Action, vault: Vault, rules: Rules) -> ValidationResult:
+    """The AI may ask to read a hidden value only for kinds the user set to Ask; the user then decides."""
+    token = TOKEN.fullmatch(action.value)
+    if token is None or vault.resolve(token[1]) is None:
+        return ValidationResult(False, reason="Reveal needs one {{TYPE#n}} token from the secrets list.")
+    mode = rules.mode(token_type(token[1]))
+    if mode == "redact":
+        return ValidationResult(False, reason="That kind of data is set to stay hidden.")
+    return ValidationResult(True, needs_approval=mode == "ask")
+
+
+def validate(action: Action, snap: SanitizedSnapshot, vault: Vault, rules: Rules | None = None) -> ValidationResult:
+    rules = rules or Rules()
     if action.action not in ACTIONS:
         return ValidationResult(False, reason=f"Unknown action '{action.action}'.")
+    if action.action == "reveal":
+        return _check_reveal(action, vault, rules)
     if action.action in {"scroll", "wait", "done", "ask_user"}:
         return ValidationResult(True)
     element = next((e for e in snap.elements if e.id == action.target), None)
@@ -89,7 +105,7 @@ def validate(action: Action, snap: SanitizedSnapshot, vault: Vault) -> Validatio
                                 reason=f"{element.label} {element.text}".strip())
     if not (element.can_type or element.tag == "select"):
         return ValidationResult(False, reason=f"{element.id} cannot take text.")
-    bad = _check_value(action, snap, vault)
+    bad = _check_value(action, snap, vault, rules)
     if bad:
         return bad
     uses_secret = bool(TOKEN.search(action.value))

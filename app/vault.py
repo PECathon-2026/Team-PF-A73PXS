@@ -1,4 +1,5 @@
 import re
+from collections.abc import Container
 
 PLACEHOLDER = re.compile(r"\[REDACTED:([A-Z_]+)#(\d+)(?: - [^\]]+)?\]")
 TOKEN = re.compile(r"\{\{([A-Z_]+#\d+)\}\}")
@@ -44,9 +45,10 @@ class Vault:
     def tokens(self) -> list[str]:
         return list(self._by_token)
 
-    def values(self) -> list[str]:
-        """Every real value in raw and compact form, plus canaries, for the outbound guard."""
-        raw = list(self._by_token.values()) + list(self.canaries)
+    def values(self, skip_types: Container[str] = frozenset()) -> list[str]:
+        """Every real value in raw and compact form, plus canaries, for the outbound guard.
+        Values of the skipped types are left out; canaries never are."""
+        raw = [v for t, v in self._by_token.items() if token_type(t) not in skip_types] + list(self.canaries)
         return raw + [_key(v) for v in raw if _key(v) != v]
 
     def clear(self) -> None:

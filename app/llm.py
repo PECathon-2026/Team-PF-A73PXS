@@ -58,6 +58,9 @@ class MockLLM:
             yield from self._fill_all(obs)
             yield from self._click(obs, "verify")
         elif "support" in task:
+            # Only a task that asks for verification needs an ID, so the default support task never asks to see one.
+            if "verify" in task:
+                yield from self._reveal(obs)
             yield from self._type(obs, "message", "Hello, could you tell me the status of my order?")
             yield from self._click(obs, "send")
         elif "mute" in task:
@@ -87,6 +90,16 @@ class MockLLM:
         if e:
             yield {"action": "type", "target": e["id"], "value": text, "label": e["label"] or e["text"],
                    "reason": f"write in {words}"}
+
+    def _reveal(self, obs: dict) -> Iterator[dict]:
+        """Ask to read a hidden detail the task names, if the user set it to Ask; next_action skips any
+        already revealed."""
+        task = obs["task"].lower()
+        tokens = {s["kind"]: s["token"] for s in reversed(obs["secrets"])}
+        for kind in obs.get("ask_kinds", []):
+            if kind in tokens and kind.lower().replace("_", " ") in task:
+                yield {"action": "reveal", "target": "", "value": tokens[kind], "label": "",
+                       "reason": f"the task needs the {kind.lower()}"}
 
     def _fill_all(self, obs: dict) -> Iterator[dict]:
         tokens = {s["kind"]: s["token"] for s in reversed(obs["secrets"])}

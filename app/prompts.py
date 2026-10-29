@@ -2,6 +2,7 @@ import json
 import re
 
 from app.models import SanitizedSnapshot
+from app.rules import Rules
 from app.vault import Vault, token_type
 
 OUTLINE_CHARS = 2000
@@ -25,8 +26,11 @@ that "secrets" already covers.
 - Work one page at a time. A one-time code only appears on the page after an earlier step such as signing in, \
 so do the visible step first and look again.
 - Never leave the site and never paste private data into free-text fields.
+- If a hidden value of a kind listed in "ask_kinds" is needed for the task, use action "reveal" with its token \
+in "value", for example {"action": "reveal", "value": "{{AADHAAR#1}}", "reason": "..."}; the user will be asked. \
+Otherwise never ask for it.
 - Reply with one JSON object and nothing else:
-  {"action": "click|type|select|scroll|wait|done|ask_user", "target": "eN", "value": "...", "reason": "..."}
+  {"action": "click|type|select|scroll|wait|done|ask_user|reveal", "target": "eN", "value": "...", "reason": "..."}
 - Use "done" only after your own "history" shows the steps the task needs. An empty history means nothing has been done yet, whatever the page looks like.
 - Use "ask_user" only when no visible step can move the task forward."""
 
@@ -48,7 +52,8 @@ def outline(aria: str) -> str:
     return "\n".join(kept)[:OUTLINE_CHARS]
 
 
-def build_observation(task: str, snap: SanitizedSnapshot, vault: Vault, history: list[dict]) -> str:
+def build_observation(task: str, snap: SanitizedSnapshot, vault: Vault, history: list[dict],
+                      rules: Rules | None = None) -> str:
     elements = [
         {
             "id": e.id, "tag": e.tag, "label": e.label, "text": e.text, "value": e.value,
@@ -58,7 +63,9 @@ def build_observation(task: str, snap: SanitizedSnapshot, vault: Vault, history:
         if not e.hidden
     ]
     secrets = [{"token": "{{" + t + "}}", "kind": token_type(t)} for t in vault.tokens()]
+    # Only kinds the AI could actually ask for: in Ask mode, not yet shared, with a token it can name.
+    ask_kinds = sorted({s["kind"] for s in secrets if rules and rules.mode(s["kind"]) == "ask"})
     return json.dumps({
-        "task": task, "url": snap.url, "secrets": secrets, "elements": elements,
+        "task": task, "url": snap.url, "secrets": secrets, "ask_kinds": ask_kinds, "elements": elements,
         "page_text": snap.page_text[:3000], "outline": outline(snap.aria), "history": history[-8:],
     })

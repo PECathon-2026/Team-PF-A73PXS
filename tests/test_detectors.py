@@ -99,21 +99,19 @@ def test_context_rules():
     assert "ADDRESS" in types("address: 12 Fake Street, Nowhere Town")
 
 
-def test_rules_can_switch_a_type_off_and_add_custom():
-    off = Rules()
-    off.enabled["EMAIL"] = False
-    assert types("a@b.test", off) == []
+def test_rules_can_reveal_a_type_and_add_custom():
+    shared = Rules().with_shared({"EMAIL"})
+    assert types("a@b.test", shared) == []
     custom = Rules(custom=[r"Project Falcon"])
     assert types("about Project Falcon", custom) == ["CUSTOM"]
 
 
-def test_custom_switch_off_stops_custom_rules_but_not_the_guard():
+def test_custom_rules_stay_hidden_even_if_custom_is_marked_reveal():
     from app.guard import check_outbound
     from app.vault import Vault
 
-    rules = Rules(custom=[r"Project Falcon"])
-    rules.enabled["CUSTOM"] = False
-    assert types("about Project Falcon", rules) == []
+    rules = Rules(custom=[r"Project Falcon"]).with_shared({"CUSTOM"})
+    assert types("about Project Falcon", rules) == ["CUSTOM"]
     assert not check_outbound("about Project Falcon", Vault(), rules).allowed
 
 

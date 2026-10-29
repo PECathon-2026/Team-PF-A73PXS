@@ -192,10 +192,10 @@ def compact_value(value: str) -> str:
     return "".join(filter(str.isalnum, unicodedata.normalize("NFKC", value).lower()))
 
 
-def _known_findings(norm: str, origin: list[int], vault: Vault) -> list[Finding]:
+def _known_findings(norm: str, origin: list[int], vault: Vault, rules: Rules) -> list[Finding]:
     found = []
     flat, flat_origin = compact(norm)
-    known = [(t, v) for t, v, _ in vault.items()] + [("CUSTOM", c) for c in vault.canaries]
+    known = [(t, v) for t, v, _ in vault.items() if rules.on(t)] + [("CUSTOM", c) for c in vault.canaries]
     for type_, value in known:
         needle = compact_value(value)
         if len(needle) < KNOWN_MIN_LEN or type_ in KNOWN_SKIP:
@@ -222,5 +222,5 @@ def find_sensitive(text: str, rules: Rules | None = None, vault: Vault | None = 
     if rules.on("CUSTOM"):
         found += _custom_findings(text, rules)
     if vault:
-        found += _known_findings(norm, origin, vault)
+        found += _known_findings(norm, origin, vault, rules)
     return _resolve_overlaps(found)
