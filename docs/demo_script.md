@@ -2,7 +2,7 @@
 
 ## Setup on Windows
 
-1. Follow README section 2 (create `.venv`, install requirements and Playwright browsers, copy `.env.example` to `.env`, run `python -m app.server`). `run.bat` does the same, but its activate line is broken in the current version; check it before the demo.
+1. Follow README section 2 (create `.venv`, install requirements and Playwright browsers, copy `.env.example` to `.env`, run `python -m app.server`). `run.bat` does the same and was run successfully in the fresh-clone test.
 2. Open http://localhost:8000 on the PC.
 3. Phone: join the same Wi-Fi and open `http://<pc-ip>:8000`. Find the IP with `ipconfig` (IPv4 Address). Allow Python through Windows Firewall if asked.
 4. For Gemini, put `GEMINI_API_KEY=...` in `.env`, run `python scripts/check_gemini.py`, and restart. Optional: `GEMINI_FALLBACK_MODELS` sets the models tried after a 429 (default `gemini-3.6-flash,gemini-3.5-flash`). The audit log shows "the AI answered (<model>)" for each call. Without a key the app uses the Mock.
