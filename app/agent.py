@@ -6,7 +6,7 @@ from app.dom_snapshot import take_snapshot
 from app.executor import block_external, execute
 from app.guard import check_outbound
 from app.llm import LLMError, RecordingLLM, get_llm
-from app.models import Action, AuditEvent, ReportItem
+from app.models import Action, AuditEvent, ReportItem, ValidationResult
 from app.profile import load_canaries_into_vault, load_profile_into_vault
 from app.prompts import SYSTEM_PROMPT, build_observation
 from app.rules import Rules
@@ -121,6 +121,14 @@ def _question(action: Action, label: str, raw_text: str, vault: Vault, kind: str
     return f"Go ahead and press \"{label}\"?", "This kind of step cannot easily be undone."
 
 
+def _check(action: Action | None, san, session: Session) -> ValidationResult | None:
+    if action is None:
+        return None
+    if action.action == "done" and not any(h["result"] == "ok" for h in session.history):
+        return ValidationResult(False, reason="Nothing has been done yet. Take the steps the task needs first.")
+    return validate(action, san, session.vault)
+
+
 async def _step(session: Session, n: int) -> str:
     """Run one step. Returns '' to continue, or the reason to stop."""
     raw = await take_snapshot(session.page, session.rules, session.vault)
@@ -140,14 +148,14 @@ async def _step(session: Session, n: int) -> str:
     reply = await asyncio.to_thread(session.llm.next_action, SYSTEM_PROMPT, observation)
     session.emit(n, "llm", "the AI answered")
     action = parse_action(reply)
-    result = validate(action, san, session.vault) if action else None
+    result = _check(action, san, session)
     if action is None or not result.ok:
         reason = result.reason if result else "The reply was not valid JSON."
         session.history.append({"step": n, "action": getattr(action, "action", "?"), "label": "", "value": "",
                                 "result": f"rejected: {reason}"})
         session.emit(n, "validate", f"rejected: {reason}")
         session.rejections += 1
-        return "too many rejected actions" if session.rejections >= MAX_REJECTIONS else ""
+        return "the AI kept proposing steps that were not allowed, so it was stopped" if session.rejections >= MAX_REJECTIONS else ""
     session.rejections = 0
     if action.action == "done":
         return "done"

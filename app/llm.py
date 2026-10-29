@@ -5,6 +5,9 @@ import time
 import httpx
 
 
+RETRY_SECONDS = (2, 6, 15)
+
+
 class LLMError(Exception):
     pass
 
@@ -111,7 +114,7 @@ class GeminiLLM:
             "contents": [{"role": "user", "parts": [{"text": observation}]}],
             "generationConfig": {"responseMimeType": "application/json", "temperature": 0},
         }
-        for attempt in range(3):
+        for attempt in range(len(RETRY_SECONDS)):
             try:
                 r = httpx.post(self.url.format(model=self.model), json=body, timeout=30,
                                headers={"x-goog-api-key": self.key})
@@ -120,13 +123,13 @@ class GeminiLLM:
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code < 500 and exc.response.status_code != 429:
                     raise LLMError("the AI service rejected the request") from None
-                time.sleep(1 + attempt)
+                time.sleep(RETRY_SECONDS[attempt])
             except (httpx.HTTPError, KeyError, IndexError, ValueError):
-                time.sleep(1 + attempt)
+                time.sleep(RETRY_SECONDS[attempt])
         raise LLMError("the AI service could not be reached")
 
 
 def get_llm(name: str):
     if name == "gemini":
         return GeminiLLM()
-    return MockLLM()
+    return MockLLM(gullible=name == "mock_fooled")

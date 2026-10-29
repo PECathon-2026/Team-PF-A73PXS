@@ -15,9 +15,11 @@ import tracemalloc
 from pathlib import Path
 
 import psutil
+from dotenv import load_dotenv
 from playwright.async_api import async_playwright
 
 ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(ROOT / ".env")
 sys.path.insert(0, str(ROOT))
 
 from app import agent  # noqa: E402
@@ -128,11 +130,11 @@ def secrets_in(payloads: list[str], key: str) -> list[str]:
     return [v for v in values if any(present(v, p) for p in payloads)]
 
 
-async def task_runs(browser, base_url: str) -> dict:
+async def task_runs(browser, base_url: str, llm_name: str = "mock") -> dict:
     results, leaks, timings = {}, [], []
     for key in agent.SCENARIO_FILES:
         start = time.perf_counter()
-        session = await run_scenario(browser, base_url, key)
+        session = await run_scenario(browser, base_url, key, llm_name=llm_name)
         steps = max(1, len([e for e in session.events if e.kind == "execute"]))
         timings.append((time.perf_counter() - start) * 1000 / steps)
         leaks += secrets_in(session.llm.payloads, key)
@@ -225,6 +227,33 @@ def summarize(values: list[float]) -> dict:
             "p95_ms": round(ordered[min(len(ordered) - 1, int(len(ordered) * 0.95))], 1)}
 
 
+GEMINI_REPEATS = 3
+
+
+async def gemini_runs(pw, base_url: str, quick: bool) -> dict:
+    if quick or not os.getenv("GEMINI_API_KEY"):
+        return {"skipped": "quick mode" if quick else "no GEMINI_API_KEY in .env"}
+    browser = await pw.chromium.launch()
+    wins: dict[str, int] = {}
+    failures: list[str] = []
+    leaked = 0
+    try:
+        for _ in range(GEMINI_REPEATS):
+            for key in agent.SCENARIO_FILES:
+                session = await run_scenario(browser, base_url, key, llm_name="gemini")
+                wins[key] = wins.get(key, 0) + bool(session.success)
+                leaked += len(secrets_in(session.llm.payloads, key))
+                if not session.success:
+                    failures.append(f"{key}: {session.narration}")
+                await session.close()
+    finally:
+        await browser.close()
+    total = GEMINI_REPEATS * len(wins)
+    return {"model": os.getenv("GEMINI_MODEL", ""), "runs_per_scenario": GEMINI_REPEATS,
+            "task_success_pct": pct(sum(wins.values()), total), "successes_by_scenario": wins,
+            "failure_reasons": failures, "leaked_values_in_ai_payloads": leaked}
+
+
 async def cross_browser(pw, base_url: str) -> dict:
     out = {}
     for name in ("chromium", "firefox", "webkit"):
@@ -254,7 +283,7 @@ def write_markdown(r: dict) -> None:
     lines += [f"- {k}: {v}%" for k, v in d["recall_by_type_pct"].items()]
     lines += ["", "Latency (ms):", ""] + [f"- {k}: median {v['median_ms']}, p95 {v['p95_ms']}"
                                           for k, v in r["performance"].items()]
-    lines += ["", f"Resources: {json.dumps(r['resources'])}", "", f"Gemini: {r['gemini']}", "",
+    lines += ["", f"Resources: {json.dumps(r['resources'])}", "", f"Gemini: {json.dumps(r['gemini'])}", "",
               f"Cross-browser: {json.dumps(r.get('cross_browser', 'skipped in quick mode'))}"]
     Path(__file__).with_name("results.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -272,6 +301,7 @@ async def main(quick: bool) -> dict:
         timings["full_step"] = tasks["step_ms"]
         await browser.close()
         cross = None if quick else await cross_browser(pw, base_url)
+        gemini = await gemini_runs(pw, base_url, quick)
     server.shutdown()
     del tasks["step_ms"]
     proc = psutil.Process(os.getpid())
@@ -283,7 +313,7 @@ async def main(quick: bool) -> dict:
         "performance": {k: summarize(v) for k, v in timings.items()},
         "resources": {"peak_python_mb": round(tracemalloc.get_traced_memory()[1] / 2**20, 1),
                       "process_rss_mb": round(proc.memory_info().rss / 2**20, 1)},
-        "gemini": "skipped: no GEMINI_API_KEY in .env" if not os.getenv("GEMINI_API_KEY") else "key present, not run",
+        "gemini": gemini,
     }
     if cross is not None:
         results["cross_browser"] = cross

@@ -362,7 +362,8 @@ function renderAiChoice(config) {
   };
   const box = app.panel.ai;
   box.replaceChildren(option("mock", "Mock (offline)", false),
-    option("gemini", "Gemini", !config.gemini_available), note);
+    option("gemini", "Gemini", !config.gemini_available),
+    option("mock_fooled", "Offline test AI that obeys the page (shows attacks being stopped)", false), note);
   if (!config.gemini_available) note.textContent = "Gemini is off: add GEMINI_API_KEY to .env to enable it.";
 }
 

@@ -165,18 +165,17 @@ def test_switch_toggles_between_real_and_ai_view(ui, base):
     run_scenario(ui, base, "Ask support")
     real, ai = ui.locator("#img-real"), ui.locator("#img-ai")
     ui.wait_for_function("document.getElementById('img-ai').src && document.getElementById('img-real').src")
-    real_src, ai_src = real.get_attribute("src"), ai.get_attribute("src")
-    assert real_src != ai_src
+    assert real.get_attribute("src") != ai.get_attribute("src")
     switch = ui.locator("#ai-view")
     assert switch.get_attribute("role") == "switch" and not switch.is_checked()
     assert "is-shown" in real.get_attribute("class") and "is-shown" not in ai.get_attribute("class")
     ui.locator(".switch").click()
     assert switch.is_checked()
     assert "is-shown" in ai.get_attribute("class") and "is-shown" not in real.get_attribute("class")
-    assert ui.locator("img.is-shown").get_attribute("src") == ai_src
+    assert ui.evaluate("document.querySelector('img.is-shown').id") == "img-ai"
     ui.shot("2_switch")
     ui.locator(".switch").click()
-    assert ui.locator("img.is-shown").get_attribute("src") == real_src
+    assert ui.evaluate("document.querySelector('img.is-shown').id") == "img-real"
 
 
 def test_human_words_only(ui, base):
@@ -305,6 +304,6 @@ def test_how_it_works_view(solo, base):
     expect(panel.locator(".mono").first).not_to_be_empty()
     expect(panel.locator(".list li").first).to_contain_text(re.compile("execute|approval|validate"))
     expect(panel.locator(".rules .rule").first).to_be_visible()
-    expect(panel.locator("input[name=ai]")).to_have_count(2)
+    expect(panel.locator("input[name=ai]")).to_have_count(3)
     expect(panel.get_by_role("button", name="Run leak test")).to_be_visible()
     solo.screenshot(path=str(SCREENS / "14_how_1440x900_light.png"))

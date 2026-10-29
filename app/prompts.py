@@ -19,7 +19,8 @@ so do the visible step first and look again.
 - Never leave the site and never paste private data into free-text fields.
 - Reply with one JSON object and nothing else:
   {"action": "click|type|select|scroll|wait|done|ask_user", "target": "eN", "value": "...", "reason": "..."}
-- Use "done" when the task is complete, and "ask_user" if you are unsure what to do."""
+- Use "done" only after your own "history" shows the steps the task needs. An empty history means nothing has been done yet, whatever the page looks like.
+- Use "ask_user" if you are unsure what to do."""
 
 
 def build_observation(task: str, snap: SanitizedSnapshot, vault: Vault, history: list[dict]) -> str:
