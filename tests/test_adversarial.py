@@ -151,8 +151,7 @@ def test_execute_with_unknown_target_raises_lookup_error():
 
 
 @pytest.fixture
-def lan(monkeypatch):
-    monkeypatch.setattr(server, "LAN_ADDRESSES", {"10.0.0.1"})
+def lan():
     return TestClient(server.app, base_url="http://10.0.0.1:8000", client=("10.0.0.5", 1234))
 
 
@@ -165,6 +164,11 @@ def test_phone_can_still_watch_and_approve(lan):
     assert lan.get("/api/session").status_code == 200
     assert lan.get("/api/session/image/ai").status_code == 200
     assert lan.post("/api/session/approve", json={"approved": True}).status_code == 200
+
+
+@pytest.mark.parametrize("name", ["192.168.1.20", "10.0.0.7", "[fe80::1]", "localhost"])
+def test_ip_literals_and_localhost_are_trusted_hosts(name):
+    assert server._trusted_host(name.rsplit(":", 1)[0] if name.count(":") == 1 else name)
 
 
 def test_unknown_host_header_is_refused():

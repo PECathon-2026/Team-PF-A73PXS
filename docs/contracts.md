@@ -14,7 +14,6 @@ class Finding:
     value: str         # raw value; lives only in memory, never logged or sent
     reason: str        # human reason, e.g. "16 digits that pass the card checksum"
     source: str        # pattern | structure | context | vision
-    confidence: float  # 0..1
 
 @dataclass
 class Element:
@@ -44,7 +43,7 @@ class SanitizedSnapshot:
     url: str
     elements: list[Element]    # same ids, sensitive strings replaced by placeholders
     page_text: str
-    aria: str
+    aria: str                  # sanitized accessibility tree; sent as "outline" (see prompts below)
     screenshot: bytes          # solid blackout over every sensitive region
     report: list[ReportItem]   # type, placeholder, reason, source; never the raw value
 
@@ -77,16 +76,17 @@ class AuditEvent:
 
 | Module | Signature | Notes |
 |---|---|---|
-| detectors | `find_sensitive(text: str, rules: Rules) -> list[Finding]` | normalizes first, then runs pattern and context rules |
+| detectors | `find_sensitive(text: str, rules: Rules) -> list[Finding]` | normalizes first, then runs pattern, context and custom rules; each runs only if `rules.on(type)` (custom rules under CUSTOM); the guard always scans every type |
 | detectors | `luhn_valid(digits: str) -> bool`, `verhoeff_valid(digits: str) -> bool` | |
 | context_rules | `find_contextual(text: str) -> list[Finding]` | NAME, ADDRESS, DOB, MEDICAL |
 | faces | `find_faces(png: bytes) -> list[tuple[int, int, int, int]]` | OpenCV Haar cascade |
 | dom_snapshot | `take_snapshot(page) -> Snapshot` | async |
 | vault | `Vault.add(finding) -> str` returns the placeholder; `Vault.resolve(token) -> str`; `Vault.values()`; `Vault.clear()` | memory only |
 | sanitizer | `sanitize(snap: Snapshot, vault: Vault, rules: Rules) -> SanitizedSnapshot` | |
+| prompts | `build_observation(task, snap, vault, history) -> str` | JSON with task, url, secrets, elements, page_text, outline (sanitized ARIA without `- /attr:` property lines or form-field values, first 2000 characters), history |
 | guard | `check_outbound(payload: str, vault: Vault, rules: Rules) -> GuardResult` | fail closed |
 | scrub | `scrub(text: str, vault: Vault) -> str` | removes vault values from any message |
-| llm | `class LLM: def next_action(self, prompt: str, observation: str) -> str` | Gemini, Mock, Recording wrappers |
+| llm | `next_action(self, system: str, observation: str) -> str` on `GeminiLLM`, `MockLLM`, `RecordingLLM` | Gemini, Mock, Recording wrapper |
 | validator | `validate(action: Action, snap: SanitizedSnapshot, vault: Vault) -> ValidationResult` | |
 | executor | `execute(page, action, snap, vault, profile) -> None` | injects vault values locally |
 | agent | `run_task(session) -> AsyncIterator[AuditEvent]` | step budget 12 |

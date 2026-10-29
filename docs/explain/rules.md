@@ -11,5 +11,5 @@ Holds the user's privacy settings: which types to hide, which types get a hint l
 ## Likely judge questions
 1. If I turn off CARD, will my card go to the AI? No. The sanitizer stops hiding it, but the guard scans with every type on and blocks the payload, so the run stops.
 2. What are custom rules? Regexes from the user. Matches become CUSTOM findings. The guard also uses them.
-3. What if a custom regex is invalid? `re.finditer` raises. In the sanitizer the step fails and is blocked; in the guard the exception is caught and the payload is blocked. Either way nothing is sent, but the agent cannot run until the rule is fixed. The server does not check the regex when saving.
+3. What if a custom regex is invalid or slow? `PUT /api/rules` refuses it with HTTP 400: longer than 100 characters, does not compile, or does not finish on test strings within 2 s in a separate process. A rules.json edited by hand skips that check; then a bad regex makes the step fail and nothing is sent.
 4. Why default to on for unknown types? A new type should be hidden until someone decides otherwise.

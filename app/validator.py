@@ -5,7 +5,8 @@ from urllib.parse import urlparse
 
 from app.detectors import ZERO_WIDTH, find_sensitive
 from app.models import Action, Element, SanitizedSnapshot, ValidationResult
-from app.vault import TOKEN, Vault
+from app.executor import LOCAL_HOSTS
+from app.vault import PLACEHOLDER, TOKEN, Vault, token_type
 
 ACTIONS = {"click", "type", "select", "scroll", "wait", "done", "ask_user"}
 IRREVERSIBLE = re.compile(r"\b(pay|submit|send|delete|remove|confirm|purchase|place\s+order|transfer|rotate|verify)\b",
@@ -13,7 +14,6 @@ IRREVERSIBLE = re.compile(r"\b(pay|submit|send|delete|remove|confirm|purchase|pl
 # Greek and Cyrillic letters that look like Latin ones, so a Greek Rho in "Pay" still reads as "Pay".
 CONFUSABLES = str.maketrans("ΑΒΕΖΗΙΚΜΝΟΡΤΥΧαορυν" "АВЕКМНОРСТУХаеорсухѕіјԁ",
                             "ABEZHIKMNOPTYXaopuv" "ABEKMHOPCTYXaeopcyxsijd")
-LOCAL_HOSTS = {"localhost", "127.0.0.1", "[::1]", "::1"}
 BARE_HOST = re.compile(r"(?<![\w@.\-])((?:[a-z0-9\-]+\.)+[a-z]{2,})(?=/|$)", re.I | re.M)
 
 
@@ -54,13 +54,13 @@ def _click_needs_approval(element: Element) -> bool:
 
 
 def _check_value(action: Action, snap: SanitizedSnapshot, vault: Vault) -> ValidationResult | None:
-    if "[REDACTED" in action.value:
+    if PLACEHOLDER.search(action.value):
         return ValidationResult(False, reason="Use a {{TYPE#n}} token from the secrets list, not a placeholder.")
     kind = snap.element_types.get(action.target, "")
     for token in TOKEN.findall(action.value):
         if vault.resolve(token) is None:
             return ValidationResult(False, reason=f"{token} is not a known secret.")
-        if vault.type_of(token) != kind:
+        if token_type(token) != kind:
             return ValidationResult(False, reason=f"{token} does not belong in this field.")
     literal = TOKEN.sub("", action.value)
     if _names_a_host(literal):

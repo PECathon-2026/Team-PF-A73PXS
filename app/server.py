@@ -1,11 +1,13 @@
 import asyncio
+import contextlib
+import ipaddress
 import json
 import os
 import re
-import socket
 import subprocess
 import sys
 from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
 from io import BytesIO
 from pathlib import Path
 
@@ -18,13 +20,15 @@ from PIL import Image
 from playwright.async_api import async_playwright
 
 from app import agent
+from app.executor import LOCAL_HOSTS
 from app.rules import ALL_TYPES, Rules, load_rules, save_rules
 from app.runner import task_for
 
 ROOT = Path(__file__).resolve().parent.parent
 PORT = int(os.getenv("PRIVACYLENS_PORT", "8000"))
-LOOPBACK_CLIENTS = {"127.0.0.1", "::1", "localhost"}
-LOOPBACK_NAMES = {"localhost", "127.0.0.1", "[::1]"}
+LOOPBACK_CLIENTS = LOCAL_HOSTS - {"[::1]"}
+LOOPBACK_NAMES = LOCAL_HOSTS - {"::1"}
+AI_CHOICES = {"mock", "mock_fooled", "gemini"}
 RULE_CHECK_SECONDS = 2
 # A rule that takes exponential time on one of these would freeze every snapshot, so it is refused.
 RULE_PROBES = [c * 40 + "!" for c in "aA1 .-_@x"]
@@ -35,11 +39,13 @@ TITLES = {"checkout": "Pay for my cart", "login": "Log me in", "support": "Ask s
 load_dotenv(ROOT / ".env")
 
 
+@dataclass
 class State:
     session: agent.Session | None = None
     run_task: asyncio.Task | None = None
-    rules: Rules = load_rules()
-    ai: str = "gemini" if os.getenv("GEMINI_API_KEY") else "mock"
+    rules: Rules = field(default_factory=Rules)
+    ai: str = field(default_factory=lambda: "gemini" if os.getenv("GEMINI_API_KEY") else "mock")
+    eval_running: bool = False
 
 
 state = State()
@@ -47,12 +53,12 @@ state = State()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    state.rules = load_rules()
     async with async_playwright() as pw:
         # Proxy-only WebRTC is a second lock behind the init script that removes WebRTC from pages.
         app.state.browser = await pw.chromium.launch(args=["--force-webrtc-ip-handling-policy=disable_non_proxied_udp"])
         yield
-        if state.session:
-            await state.session.close()
+        await _end_session()
         await app.state.browser.close()
 
 
@@ -63,25 +69,26 @@ def _png_size(png: bytes) -> list[int]:
     return list(Image.open(BytesIO(png)).size) if png else [0, 0]
 
 
-def _lan_addresses() -> set[str]:
-    try:
-        return set(socket.gethostbyname_ex(socket.gethostname())[2])
-    except OSError:
-        return set()
-
-
-LAN_ADDRESSES = _lan_addresses()
-
-
 def _host_name(request: Request) -> str:
     host = request.headers.get("host", "")
     return host.rsplit(":", 1)[0] if not host.endswith("]") else host
 
 
+def _trusted_host(name: str) -> bool:
+    """localhost or a bare IP address. A rebinding attack needs a host name, so any other name is refused."""
+    if name in LOOPBACK_NAMES:
+        return True
+    try:
+        ipaddress.ip_address(name.strip("[]"))
+    except ValueError:
+        return False
+    return True
+
+
 @app.middleware("http")
 async def trusted_host(request: Request, call_next):
     """A web page elsewhere cannot rename itself to our address (DNS rebinding) and read the API."""
-    if request.url.path.startswith("/api/") and _host_name(request) not in LOOPBACK_NAMES | LAN_ADDRESSES:
+    if request.url.path.startswith("/api/") and not _trusted_host(_host_name(request)):
         return Response("unknown host", status_code=403)
     return await call_next(request)
 
@@ -106,17 +113,31 @@ def config():
 @app.post("/api/config")
 def set_ai(request: Request, body: dict = Body(...)):
     local_only(request)
+    if body.get("ai") not in AI_CHOICES:
+        raise HTTPException(400, "Unknown AI choice.")
     if body.get("ai") == "gemini" and not os.getenv("GEMINI_API_KEY"):
         return {"ok": False, "error": "No Gemini key found in .env"}
     state.ai = body["ai"]
     return {"ok": True, "ai": state.ai}
 
 
+async def _end_session() -> None:
+    """Stop the running agent before closing its browser, so it cannot act on a closed page."""
+    if state.run_task:
+        state.run_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await state.run_task
+        state.run_task = None
+    if state.session:
+        await state.session.close()
+
+
 @app.post("/api/session")
 async def start_session(request: Request, body: dict = Body(...)):
     local_only(request)
-    if state.session:
-        await state.session.close()
+    if body.get("scenario") not in agent.SCENARIO_FILES:
+        raise HTTPException(400, "Unknown scenario.")
+    await _end_session()
     s = agent.Session(body["scenario"], body.get("task") or task_for(body["scenario"]), state.ai, state.rules)
     await s.start(app.state.browser, f"http://127.0.0.1:{PORT}")
     state.session = s
@@ -164,9 +185,9 @@ def approve(body: dict = Body(...)):
 async def leak_test(request: Request):
     local_only(request)
     if state.session is None:
-        await start_session(request, {"scenario": "checkout"})
-        await asyncio.sleep(0.5)
-    return {"blocked": await agent.leak_test(state.session)}
+        # A bare session with no browser: the guard is tested without starting a run.
+        state.session = agent.Session("checkout", task_for("checkout"), state.ai, state.rules)
+    return {"blocked": agent.leak_test(state.session)}
 
 
 def _check_pattern(pattern: str) -> None:
@@ -195,14 +216,25 @@ def get_rules():
     return state.rules.to_dict()
 
 
+def _is_switch_map(value) -> bool:
+    return isinstance(value, dict) and all(k in ALL_TYPES and isinstance(v, bool) for k, v in value.items())
+
+
 @app.put("/api/rules")
 def put_rules(request: Request, body: dict = Body(...)):
     local_only(request)
-    for pattern in body.get("custom", []):
+    custom = body.get("custom", state.rules.custom)
+    enabled, hints = body.get("enabled", {}), body.get("hints", {})
+    if not isinstance(custom, list) or not all(isinstance(c, str) for c in custom):
+        raise HTTPException(400, "Always hide rules must be a list of text patterns.")
+    for switches in (enabled, hints):
+        if not _is_switch_map(switches):
+            raise HTTPException(400, "Switches must map a known kind of data to on or off.")
+    for pattern in custom:
         _check_pattern(pattern)
-    state.rules.enabled.update(body.get("enabled", {}))
-    state.rules.hints = body.get("hints", state.rules.hints)
-    state.rules.custom = [c for c in body.get("custom", state.rules.custom) if c.strip()]
+    state.rules.enabled.update(enabled)
+    state.rules.hints.update(hints)
+    state.rules.custom = [c for c in custom if c.strip()]
     save_rules(state.rules)
     return state.rules.to_dict()
 
@@ -216,9 +248,17 @@ def eval_results():
 @app.post("/api/eval/run")
 async def run_eval(request: Request):
     local_only(request)
-    proc = await asyncio.create_subprocess_exec(sys.executable, str(ROOT / "eval" / "run_eval.py"), "--quick",
-                                                cwd=str(ROOT))
-    await proc.wait()
+    if state.eval_running:
+        raise HTTPException(409, "An evaluation is already running.")
+    state.eval_running = True
+    try:
+        proc = await asyncio.create_subprocess_exec(sys.executable, str(ROOT / "eval" / "run_eval.py"), "--quick",
+                                                    cwd=str(ROOT))
+        code = await proc.wait()
+    finally:
+        state.eval_running = False
+    if code != 0:
+        raise HTTPException(500, "eval failed")
     return eval_results()
 
 

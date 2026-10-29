@@ -1,12 +1,16 @@
 import asyncio
 import re
+import traceback
 import uuid
+from pathlib import Path
+
+from playwright.async_api import Error as PlaywrightError
 
 from app.dom_snapshot import take_snapshot
 from app.executor import block_external, execute
 from app.guard import check_outbound
 from app.llm import LLMError, RecordingLLM, get_llm
-from app.models import Action, AuditEvent, ReportItem, ValidationResult
+from app.models import Action, AuditEvent, ReportItem, SanitizedSnapshot, Snapshot, ValidationResult
 from app.profile import load_canaries_into_vault, load_profile_into_vault
 from app.prompts import SYSTEM_PROMPT, build_observation
 from app.rules import Rules
@@ -27,6 +31,8 @@ HUMAN_FIELD = {"CARD": "your card number", "CVV": "the card security code", "EXP
                "PASSWORD": "your password", "OTP": "the one-time code", "EMAIL": "your email", "PHONE": "your phone",
                "NAME": "your name", "ADDRESS": "your address"}
 TECHNICAL = re.compile(r"redacted|guard|payload|llm|token", re.I)
+TRACE_FRAMES = 3
+LEAK_CANARY = "CANARY-LEAKTEST-0"
 SECRET_WORDS = {"CARD": "card number", "CVV": "card security code", "PASSWORD": "password", "OTP": "one-time code"}
 
 
@@ -47,12 +53,12 @@ class Session:
         self.success: bool | None = None
         self.real_png = self.ai_png = b""
         self.outbound = self.raw_text = ""
-        self.boxes: list = []
+        self.boxes: list[tuple[float, float, float, float]] = []
         self.rejections = 0
         self.approval: dict | None = None
         self.approval_answer: bool | None = None
         self._answered = asyncio.Event()
-        self._approved_groups: set[str] = set()
+        self.approved_groups: set[str] = set()
         self.page = self.context = None
 
     def emit(self, step: int, kind: str, detail: str) -> None:
@@ -121,7 +127,7 @@ def _question(action: Action, label: str, raw_text: str, vault: Vault, kind: str
     return f"Go ahead and press \"{label}\"?", "This kind of step cannot easily be undone."
 
 
-def _check(action: Action | None, san, session: Session) -> ValidationResult | None:
+def _check(action: Action | None, san: SanitizedSnapshot, session: Session) -> ValidationResult | None:
     if action is None:
         return None
     if action.action == "done" and not any(h["result"] == "ok" for h in session.history):
@@ -155,7 +161,9 @@ async def _step(session: Session, n: int) -> str:
                                 "result": f"rejected: {reason}"})
         session.emit(n, "validate", f"rejected: {reason}")
         session.rejections += 1
-        return "the AI kept proposing steps that were not allowed, so it was stopped" if session.rejections >= MAX_REJECTIONS else ""
+        if session.rejections >= MAX_REJECTIONS:
+            return "the AI kept proposing steps that were not allowed, so it was stopped"
+        return ""
     session.rejections = 0
     if action.action == "done":
         return "done"
@@ -165,13 +173,14 @@ async def _step(session: Session, n: int) -> str:
     return await _act(session, n, action, result, raw, san)
 
 
-async def _act(session: Session, n: int, action: Action, result, raw, san) -> str:
+async def _act(session: Session, n: int, action: Action, result: ValidationResult, raw: Snapshot,
+               san: SanitizedSnapshot) -> str:
     element = next((e for e in san.elements if e.id == action.target), None)
     label = (element.label or element.text) if element else ""
     kind = san.element_types.get(action.target, "")
     group = "payment" if kind in {"CARD", "CVV"} else kind
     session.narration = _narration(action, kind)
-    remembered = action.action == "type" and group in session._approved_groups
+    remembered = action.action == "type" and group in session.approved_groups
     if result.needs_approval and not remembered:
         question, why = _question(action, label, raw.page_text, session.vault, kind)
         session.emit(n, "approval", "asked the user")
@@ -179,7 +188,7 @@ async def _act(session: Session, n: int, action: Action, result, raw, san) -> st
             session.emit(n, "approval", "not approved")
             return "stopped by you"
         if action.action == "type":
-            session._approved_groups.add(group)
+            session.approved_groups.add(group)
     await execute(session.page, action, raw, session.vault)
     session.history.append({"step": n, "action": action.action, "label": label[:HISTORY_CHARS],
                             "value": action.value[:HISTORY_CHARS], "result": "ok"})
@@ -198,6 +207,7 @@ async def run(session: Session) -> None:
             reason = "the AI could not be reached"
         except Exception as exc:
             session.block(n, f"step failed safely: {type(exc).__name__}")
+            session.emit(n, "error", _trace_summary(exc))
             reason = "blocked"
         if reason:
             break
@@ -207,19 +217,29 @@ async def run(session: Session) -> None:
     session.emit(0, "end", session.narration)
 
 
+def _trace_summary(exc: Exception) -> str:
+    """Where the step failed, without the exception message, which can quote page data."""
+    frames = traceback.extract_tb(exc.__traceback__)[-TRACE_FRAMES:]
+    where = " < ".join(f"{Path(f.filename).name}:{f.lineno} {f.name}" for f in reversed(frames))
+    return f"{type(exc).__name__} at {where}"
+
+
 async def _check_success(session: Session) -> bool:
+    if session.page is None:
+        return False
     try:
         data = await session.page.evaluate("({done: document.body.dataset.done, leak: document.body.dataset.leak})")
-    except Exception:
+    except PlaywrightError:
         return False
     return data["done"] == "true" and data["leak"] != "true"
 
 
-async def leak_test(session: Session) -> bool:
-    """Send a raw page, canary included, past the sanitizer. The guard must stop it."""
-    canary = "CANARY-LEAKTEST-0"
-    session.vault.canaries.add(canary)
-    verdict = check_outbound(f"Leak test payload {canary}", session.vault, session.rules)
+def leak_test(session: Session) -> bool:
+    """Send a raw page, canary included, past the sanitizer. The guard must stop it.
+    The canary lives in a separate vault so it never joins the live session's secrets."""
+    probe = Vault()
+    probe.canaries.add(LEAK_CANARY)
+    verdict = check_outbound(f"Leak test payload {LEAK_CANARY}", probe, session.rules)
     if not verdict.allowed:
         session.block(0, "leak test: " + verdict.reason)
     return not verdict.allowed

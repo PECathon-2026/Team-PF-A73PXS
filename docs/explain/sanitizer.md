@@ -6,8 +6,9 @@ Turns a raw `Snapshot` into a `SanitizedSnapshot`. Sensitive strings become plac
 ## How
 - `_Redactor.note` adds the value to the vault (`Vault.add`) and records a `ReportItem`. `_Redactor.text` runs `find_sensitive` and replaces findings from the end of the string backwards so offsets stay valid.
 - `_structural_placeholder` runs first for every element. It hides a field value or tile text because of where it sits. Registering these first means later mentions elsewhere (an image alt text, say) are caught as known vault values.
-- `sanitize` then redacts each element's text, label and value, plus the URL, page text and aria tree, and clears `selector`.
-- `_sensitive_boxes` collects text-match boxes, boxes of sensitive elements, every `<video>`, images whose label matches `PERSON_IMAGE`, and faces from `find_faces` when FACE is on. `_blackout` paints them with a 2 px margin.
+- `_split_placeholders` looks for values in each parent's combined text (`parent_texts`), so a value split over sibling tags is hidden in every fragment.
+- `sanitize` then redacts each element's text, label and value, plus the URL (decoded first), the visible page text and the aria tree, and clears `selector`.
+- `_sensitive_boxes` collects text-match boxes, boxes of sensitive elements and of every element whose text changed, every `<video>`, `<iframe>` and `<canvas>`, images whose label matches `PERSON_IMAGE`, and faces from `find_faces` when FACE is on. `_blackout` paints them with a 2 px margin.
 - `hint_for` adds an optional label such as "Visa" or "IPv4", only for types where the user turned hints on.
 
 ## Likely judge questions

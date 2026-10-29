@@ -21,7 +21,11 @@ def try_model(key: str, model: str) -> bool:
     if r.status_code == 200:
         print(f"{model}: works")
         return True
-    message = r.json().get("error", {}).get("message", "")[:120].replace(key, "[key]")
+    try:
+        message = str(r.json().get("error", {}).get("message", ""))
+    except (ValueError, AttributeError):
+        message = "(no readable error message)"
+    message = message[:120].replace(key, "[key]")
     print(f"{model}: HTTP {r.status_code} {message}")
     return False
 

@@ -48,7 +48,7 @@ Speaker note: Point at the two arrows that leave the machine. One goes through t
 - Keyword context: OTP near "code", password in a sentence.
 - Structure: field types, video call tiles, saved vault values.
 - Face detection on the screenshot.
-- Normalization defeats zero-width characters, full-width digits, split lines.
+- Normalization defeats zero-width characters, full-width digits, split lines and odd separators; values split across tags are found in the parent text.
 
 Speaker note: Then the guard checks the final string again. Two independent layers have to fail for a leak.
 
@@ -59,15 +59,15 @@ Speaker note: Then the guard checks the final string again. Two independent laye
 - "See what the AI sees" switch flips between the two views.
 - How it works panel shows raw snapshot next to the exact outbound text.
 
-Speaker note: Show the switch live. Mention honestly that the blacked-out screenshot is produced but the model currently receives text only.
+Speaker note: Show the switch live. Mention honestly that the blacked-out screenshot is produced but the model receives text only.
 
 ## 6. AI reasoning, validation, approval
 
 - The AI answers with one JSON action per step.
 - The validator rejects unknown actions, missing targets, wrong-field tokens, guessed secrets, off-site URLs.
-- Pay, submit, send, verify and similar clicks need the user's OK.
+- Pay, submit, send, verify and similar clicks need the user's OK, every time, even with lookalike letters in the label.
 - Typing a card, CVV, password or OTP needs the user's OK.
-- 12 step budget, stop after 3 rejections in a row.
+- "done" before any real step is rejected. 12 step budget, stop after 3 rejections in a row.
 
 Speaker note: The approval sheet works from a phone on the same Wi-Fi. First answer wins.
 
@@ -83,7 +83,8 @@ Speaker note: This is how the agent finishes checkout while the model stays blin
 ## 8. Security: injection and leak test
 
 - Injection page hides instructions in display:none, off-screen and tiny text.
-- A gullible Mock tries to follow them: followed = false [`security.injection.agent_followed_injection`], 3 attempts rejected [`security.injection.attempts_rejected_by_validator`].
+- Hidden text is not sent to the model at all.
+- A gullible Mock tries to follow them: card pasted = false [`security.injection.card_pasted_into_feedback`], 3 attempts rejected [`security.injection.attempts_rejected_by_validator`].
 - Adversarial cases: 20 of 20 pass [`security.passed`, `security.total`].
 - Raw unsanitized page is blocked by the guard: true [`security.raw_page_blocked_by_guard`].
 - Run leak test button: a canary sent straight to the guard is blocked.
@@ -97,13 +98,14 @@ Speaker note: The leak test skips the sanitizer on purpose. It shows the last li
 | Recall | 100.0% of 29 | `detection.recall_overall_pct`, `detection.items_checked` |
 | Precision | 100.0%, 0 of 44 lookalikes hidden | `detection.precision_pct`, `detection.lookalikes_wrongly_hidden` |
 | Task success (Mock) | 100.0% | `tasks.task_success_pct` |
+| Task success (Gemini, 3 runs per scenario) | 88.9%, 0 leaks | `gemini.task_success_pct`, `gemini.leaked_values_in_ai_payloads` |
 | Leaked values in AI payloads | 0 | `tasks.leaked_values_in_ai_payloads` |
-| Full step median / p95 | 819.3 / 974.0 ms | `performance.full_step` |
-| Peak Python memory | 11.6 MB | `resources.peak_python_mb` |
+| Full step median / p95 | 1419.1 / 1723.7 ms | `performance.full_step` |
+| Peak Python memory | 13.8 MB | `resources.peak_python_mb` |
 | Chromium / WebKit | 100.0% success, 0 leaks each | `cross_browser` |
 
 - Firefox skipped: it would not launch on our machine.
-- Gemini skipped in this run: no key. Numbers are on our own scenarios.
+- Gemini is a measured rate, not 100%. Numbers are on our own scenarios, 2 pathways.
 
 Speaker note: Say the limits out loud before a judge asks.
 
@@ -113,7 +115,7 @@ Speaker note: Say the limits out loud before a judge asks.
 - Tasks (status from docs/requirements_matrix.md):
   - A) Sensitive Information Detection: DONE, except AI-Based Detection PARTIAL (faces not measured, no NER). `detectors`, `structure`, `context_rules`, `faces`.
   - B) Privacy-Preserving Sanitization: DONE. `sanitizer`, `guard`.
-  - C) AI Reasoning and Automation: DONE, except "Integrate an LLM" PARTIAL (Gemini not verified end to end, runs use Mock). `agent`, `llm`, `validator`, `executor`.
+  - C) AI Reasoning and Automation: DONE (Mock 100.0%, Gemini 88.9%). `agent`, `llm`, `validator`, `executor`.
   - D) Privacy and Security Validation: DONE, except retention PARTIAL (documented, not tested). `guard`, `scrub`, `executor.block_external`.
 - Evaluation scenarios:
   - E-commerce checkout: card details and addresses. DONE
@@ -126,7 +128,7 @@ Speaker note: Say the limits out loud before a judge asks.
   - PII Detection Recall: DONE [`detection.recall_overall_pct`]
   - Redaction Precision: DONE [`detection.precision_pct`]
   - Privacy Leakage: DONE [`tasks.leaked_values_in_ai_payloads`]
-  - Context Preservation: PARTIAL (Mock planner only) [`tasks.task_success_pct`]
+  - Context Preservation: DONE [`tasks.task_success_pct`, `gemini.task_success_pct`]
   - Task Success: DONE [`tasks.task_success_pct`]
   - Performance: DONE [`performance`, `resources`]
   - Security: DONE [`security.passed`, `security.total`]

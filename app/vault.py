@@ -4,6 +4,11 @@ PLACEHOLDER = re.compile(r"\[REDACTED:([A-Z_]+)#(\d+)(?: - [^\]]+)?\]")
 TOKEN = re.compile(r"\{\{([A-Z_]+#\d+)\}\}")
 
 
+def token_type(token: str) -> str:
+    """The type part of a token: CARD for CARD#2."""
+    return token.split("#")[0]
+
+
 def _key(value: str) -> str:
     return re.sub(r"[\s\-.]", "", value).lower()
 
@@ -32,12 +37,9 @@ class Vault:
     def resolve(self, token: str) -> str | None:
         return self._by_token.get(token)
 
-    def type_of(self, token: str) -> str:
-        return token.split("#")[0]
-
     def items(self) -> list[tuple[str, str, str]]:
         """(type, value, token) for every value that has a placeholder."""
-        return [(t.split("#")[0], v, t) for t, v in self._by_token.items()]
+        return [(token_type(t), v, t) for t, v in self._by_token.items()]
 
     def tokens(self) -> list[str]:
         return list(self._by_token)

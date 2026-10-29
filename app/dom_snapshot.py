@@ -84,7 +84,7 @@ TEXT_NODES_JS = """
 RANGE_BOXES_JS = """
 (spans) => {
   const sx = window.scrollX, sy = window.scrollY;
-  return spans.flatMap(([i, start, end]) => {
+  return spans.map(([i, start, end]) => {
     const range = document.createRange();
     range.setStart(window.__plNodes[i], start);
     range.setEnd(window.__plNodes[i], end);
@@ -129,13 +129,8 @@ async def _text_range_boxes(page, rules: Rules, vault: Vault) -> list[tuple[str,
         for f in find_sensitive(text, rules, vault):
             spans.append([i, f.start, f.end])
             types.append(f.type)
-    if not spans:
-        return []
-    boxes = []
-    for span, type_ in zip(spans, types):
-        for box in await page.evaluate(RANGE_BOXES_JS, [span]):
-            boxes.append((type_, tuple(box)))
-    return boxes
+    per_span = await page.evaluate(RANGE_BOXES_JS, spans)
+    return [(type_, tuple(box)) for type_, boxes in zip(types, per_span) for box in boxes]
 
 
 async def take_snapshot(page, rules: Rules, vault: Vault) -> Snapshot:

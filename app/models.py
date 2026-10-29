@@ -9,7 +9,6 @@ class Finding:
     value: str
     reason: str
     source: str
-    confidence: float = 0.9
 
 
 @dataclass

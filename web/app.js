@@ -36,8 +36,6 @@ async function api(path, options = {}) {
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const typeLabel = (type) => TYPE_LABELS[type] || type.toLowerCase().replace(/_/g, " ");
 
-/* ---------- Main screen ---------- */
-
 async function loadScenarios() {
   const scenarios = await api("/api/scenarios");
   const chips = $("chips");
@@ -128,8 +126,6 @@ function toggleAiView() {
   $("frost").classList.toggle("is-off", on);
 }
 
-/* ---------- Sheets ---------- */
-
 function openSheet(id, focusTarget) {
   const sheet = $(id);
   if (!sheet.hidden) return;
@@ -194,8 +190,6 @@ function toggleWhy() {
   $("why-link").setAttribute("aria-expanded", String(!why.hidden));
 }
 
-/* ---------- Polling ---------- */
-
 async function poll() {
   try {
     app.state = await api("/api/session");
@@ -206,8 +200,6 @@ async function poll() {
   }
   setTimeout(poll, POLL_MS);
 }
-
-/* ---------- How it works (built only when opened) ---------- */
 
 function card(title, ...kids) {
   return el("section", { className: "card" }, el("h3", { textContent: title }), ...kids);
@@ -388,8 +380,6 @@ function leakTestControls() {
     el("p", { className: "note", textContent: "Sends a canary value straight to the guard, skipping the sanitizer." }),
     button, result);
 }
-
-/* ---------- Wiring ---------- */
 
 function init() {
   $("task-form").addEventListener("submit", startTask);

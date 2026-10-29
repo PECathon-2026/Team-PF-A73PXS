@@ -107,6 +107,16 @@ def test_rules_can_switch_a_type_off_and_add_custom():
     assert types("about Project Falcon", custom) == ["CUSTOM"]
 
 
+def test_custom_switch_off_stops_custom_rules_but_not_the_guard():
+    from app.guard import check_outbound
+    from app.vault import Vault
+
+    rules = Rules(custom=[r"Project Falcon"])
+    rules.enabled["CUSTOM"] = False
+    assert types("about Project Falcon", rules) == []
+    assert not check_outbound("about Project Falcon", Vault(), rules).allowed
+
+
 def test_normalize_drops_zero_width():
     norm, origin = normalize("a​b")
     assert norm == "ab" and origin == [0, 2]

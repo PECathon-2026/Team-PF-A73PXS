@@ -6,7 +6,6 @@ import http.server
 import json
 import os
 import platform
-import re
 import statistics
 import sys
 import threading
@@ -23,6 +22,7 @@ load_dotenv(ROOT / ".env")
 sys.path.insert(0, str(ROOT))
 
 from app import agent  # noqa: E402
+from app.detectors import compact, compact_value  # noqa: E402
 from app.dom_snapshot import take_snapshot  # noqa: E402
 from app.guard import check_outbound  # noqa: E402
 from app.llm import MockLLM  # noqa: E402
@@ -40,10 +40,6 @@ ADVERSARIAL = json.loads((Path(__file__).with_name("adversarial_cases.json")).re
 NOT_TEXT = {"FACE", "CANARY", "MEETING_LINK", "INJECTION"}
 
 
-def compact(s: str) -> str:
-    return re.sub(r"[\s\-.]", "", s).lower()
-
-
 def blob_of(san: SanitizedSnapshot) -> str:
     parts = [san.page_text, san.aria, san.url]
     parts += [f"{e.text} {e.label} {e.value}" for e in san.elements]
@@ -51,7 +47,7 @@ def blob_of(san: SanitizedSnapshot) -> str:
 
 
 def present(value: str, blob: str) -> bool:
-    return value in blob or compact(value) in compact(blob)
+    return value in blob or compact_value(value) in compact(blob)[0]
 
 
 def pct(n: float, d: float) -> float:

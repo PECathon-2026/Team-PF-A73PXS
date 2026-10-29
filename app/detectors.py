@@ -84,11 +84,10 @@ class Pattern:
     reason: str
     check: Callable[[str], bool] = lambda s: True
     group: int = 0
-    confidence: float = 0.95
 
 
-def _p(type_: str, rx: str, reason: str, check=lambda s: True, group: int = 0, conf: float = 0.95):
-    return Pattern(type_, re.compile(rx), reason, check, group, conf)
+def _p(type_: str, rx: str, reason: str, check=lambda s: True, group: int = 0):
+    return Pattern(type_, re.compile(rx), reason, check, group)
 
 
 # Order is priority: when two matches overlap, the earlier type wins.
@@ -102,7 +101,7 @@ PATTERNS = [
        r"|AIza[0-9A-Za-z_\-]{30,}|xox[bp]-[A-Za-z0-9\-]{10,})", "starts like a known API key or token"),
     _p("API_KEY", r"eyJ[A-Za-z0-9_\-]{8,}\.eyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]+", "has the shape of a JWT"),
     _p("API_KEY", r"(?i)\b(?:api[_ -]?key|token|secret|key)\b[^\w\n]{0,6}([A-Za-z0-9_\-+/=]{24,})",
-       "long random string next to the word key, token or secret", _key_ok, 1, 0.8),
+       "long random string next to the word key, token or secret", _key_ok, 1),
     _p("PASSWORD", r"(?i)\bpass(?:word|code)?\b\s*[:=]\s*(\S+)", "value written after the word password", group=1),
     # Bounded parts and a lookbehind keep a long run of letters from being rescanned at every offset.
     _p("EMAIL", r"(?<![A-Za-z0-9._%+\-])[A-Za-z0-9._%+\-]{1,64}@[A-Za-z0-9\-]{1,63}(?:\.[A-Za-z0-9\-]{1,63}){1,8}",
@@ -116,11 +115,11 @@ PATTERNS = [
     _p("IP_ADDRESS", r"(?<![\w:])[0-9A-Fa-f:]*:[0-9A-Fa-f:]*:[0-9A-Fa-f:]*(?![\w:])", "valid IPv6 address", _is_ip),
     _p("PHONE", rf"(?<!\d)(?<!\d{SEP})(?:\+91{SEP}?|0)?[6-9](?:{SEP}?\d){{9}}(?!\d)(?!{SEP}\d)", "Indian mobile number"),
     _p("PHONE", rf"(?<![\d+])\+\d{{1,3}}{SEP}?\(?\d{{2,4}}\)?{SEP}?\d{{3,4}}{SEP}?\d{{3,4}}(?!\d)",
-       "international phone number", conf=0.85),
+       "international phone number"),
     _p("CVV", r"(?i)\b(?:cvv2?|cvc2?|security code)\b\D{0,12}?(?<!\d)(\d{3,4})(?!\d)",
        "3 or 4 digits next to the word CVV", group=1),
     _p("OTP", r"(?i)\b(?:otp|one[- ]time|verification code|passcode|code)\b\D{0,30}?(?<!\d)(\d{4,8})(?!\d)",
-       "4 to 8 digits next to the word code or OTP", group=1, conf=0.85),
+       "4 to 8 digits next to the word code or OTP", group=1),
 ]
 PRIORITY = {p.type: i for i, p in reversed(list(enumerate(PATTERNS)))}
 
@@ -148,7 +147,7 @@ def _scan(pattern: Pattern, norm: str, origin: list[int], text: str) -> list[Fin
         start, end = origin[s], origin[e - 1] + 1
         n = len(_digits(m.group(pattern.group)))
         reason = f"{n} {pattern.reason}" if pattern.type in ("CARD", "AADHAAR") else pattern.reason
-        found.append(Finding(pattern.type, start, end, text[start:end], reason, "pattern", pattern.confidence))
+        found.append(Finding(pattern.type, start, end, text[start:end], reason, "pattern"))
     return found
 
 
@@ -166,8 +165,7 @@ def _custom_findings(text: str, rules: Rules) -> list[Finding]:
     for rx in rules.custom:
         for m in re.finditer(rx, text):
             if m.end() > m.start():
-                found.append(Finding("CUSTOM", m.start(), m.end(), m.group(), "matches your Always hide rule",
-                                     "pattern", 1.0))
+                found.append(Finding("CUSTOM", m.start(), m.end(), m.group(), "matches your Always hide rule", "pattern"))
     return found
 
 
@@ -206,7 +204,7 @@ def _known_findings(norm: str, origin: list[int], vault: Vault) -> list[Finding]
         pos = flat.find(needle)
         while pos >= 0:
             start, end = origin[flat_origin[pos]], origin[flat_origin[pos + len(needle) - 1]] + 1
-            found.append(Finding(type_, start, end, value, KNOWN_REASON, "context", 1.0))
+            found.append(Finding(type_, start, end, value, KNOWN_REASON, "context"))
             pos = flat.find(needle, pos + 1)
     return found
 
@@ -221,7 +219,8 @@ def find_sensitive(text: str, rules: Rules | None = None, vault: Vault | None = 
         if rules.on(pattern.type):
             found += _scan(pattern, norm, origin, text)
     found += [f for f in find_contextual(text) if rules.on(f.type)]
-    found += _custom_findings(text, rules)
+    if rules.on("CUSTOM"):
+        found += _custom_findings(text, rules)
     if vault:
         found += _known_findings(norm, origin, vault)
     return _resolve_overlaps(found)

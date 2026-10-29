@@ -23,5 +23,5 @@ def find_contextual(text: str) -> list[Finding]:
     for type_, rx, reason, group in CONTEXT_RULES:
         for m in rx.finditer(text):
             s, e = m.span(group)
-            found.append(Finding(type_, s, e, text[s:e], reason, "context", 0.7))
+            found.append(Finding(type_, s, e, text[s:e], reason, "context"))
     return found

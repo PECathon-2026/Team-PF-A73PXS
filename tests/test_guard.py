@@ -91,3 +91,16 @@ def test_scrub_removes_values():
     vault = Vault()
     vault.add("CARD", CARD)
     assert CARD not in scrub(f"failed for {CARD} and x@y.test", vault)
+
+
+def test_guard_malformed_escape_trailing_backslash_does_not_block_a_clean_payload():
+    payload = r'{"page_text": "path C:\temp and a stray \q"} ' + "\\"
+    assert check_outbound(payload, Vault()).allowed
+
+
+def test_guard_malformed_escape_still_catches_a_secret_beside_it():
+    vault = Vault()
+    vault.add("CARD", CARD)
+    assert not check_outbound(f"pay with {CARD} " + "\\", vault).allowed
+    escaped = CARD.replace("1", r"\u0031")
+    assert not check_outbound(f'{{"text": "{escaped}"}} ' + "\\", vault).allowed

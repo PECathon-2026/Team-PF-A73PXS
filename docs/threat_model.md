@@ -27,26 +27,29 @@
 | Sanitizer miss or bug | Final check on the exact outbound string, fail closed | `guard.check_outbound`, `agent._step`, `agent.run` |
 | Secrets in the screenshot | Solid blackout of text boxes, sensitive fields, videos, person images, faces | `dom_snapshot._text_range_boxes`, `sanitizer._sensitive_boxes`, `faces.find_faces` |
 | AI needs a secret to fill a form | Tokens only; real value swapped in locally | `vault.Vault`, `executor.fill_value` |
-| Injection makes AI paste a secret | Token type must match field type; literal values with patterns or external URLs rejected | `validator._check_value` |
-| Irreversible actions | User approval for pay/submit/send/verify-style clicks and for typing CARD, CVV, PASSWORD, OTP | `validator.validate`, `agent._act`, `agent.Session.ask` |
-| Page exfiltrates via HTTP or WebSocket | Abort every non-local browser request; close every non-local WebSocket (`context.route_web_socket`) | `executor.block_external` |
-| Someone on the network changes settings | Rules, AI choice, session start, leak test and eval run accept only requests from this machine (HTTP 403 otherwise) | `server.local_only` |
-| Invalid or oversized custom rule | Rejected on save with HTTP 400 | `server.put_rules`, `server._check_pattern` |
+| Injection makes AI paste a secret | Token type must match field type; literal values with patterns, external URLs or bare host names rejected; hidden elements cannot be targets; hidden text is not sent | `validator._check_value`, `validator.validate`, `sanitizer.sanitize` |
+| Irreversible actions | User approval for pay/submit/send/verify-style clicks (lookalike letters and zero-width characters folded), unnamed submit buttons, and typing CARD, CVV, PASSWORD, OTP | `validator._click_needs_approval`, `validator.readable`, `agent._act`, `agent.Session.ask` |
+| Page exfiltrates via HTTP, WebSocket or WebRTC | Abort every non-local browser request; close every non-local WebSocket (`context.route_web_socket`); remove WebRTC constructors with an init script; proxy-only WebRTC flag on Chromium | `executor.block_external`, `executor.NO_WEBRTC_JS`, `server.lifespan` |
+| Someone on the network changes settings or reads raw data | Rules, AI choice, session start, raw text, raw screenshot, leak test and eval run accept only requests from this machine (HTTP 403 otherwise) | `server.local_only` |
+| Another web page reads the API through DNS rebinding | `/api/` requests with an unknown Host header get HTTP 403 | `server.trusted_host` |
+| Invalid, oversized or slow custom rule | Rejected on save with HTTP 400; speed checked in a separate process with a 2 s limit | `server.put_rules`, `server._check_pattern`, `server._pattern_is_fast` |
 | Agent loops | 12 step budget, 3 rejections in a row stop | `agent.STEP_BUDGET`, `agent.MAX_REJECTIONS` |
-| Secrets in logs | Scrub every audit message; only exception class names logged | `scrub.scrub`, `agent.Session.emit` |
+| Secrets in logs | Scrub every audit message (saved values matched regardless of spacing and case); exceptions logged by class and file/line only; blocked hosts logged by site only | `scrub.scrub`, `agent.Session.emit`, `agent._trace_summary`, `executor.site_of` |
 | API key exposure | Key read from .env, sent only as a request header | `llm.GeminiLLM` |
 
 ## Known limitations
 - Participant names in a video call are found only by a structural tile rule (`dom_snapshot._structure_of`). Names outside such a container, not introduced with "my name is", and not saved in the vault, are missed.
-- Text split across elements (for example `<b>4111</b> 1111 ...`) is not blacked out on the screenshot, because boxes are computed per text node.
-- Version strings like 1.2.3.4 are valid IPv4 addresses and are hidden as IP_ADDRESS. Postal codes after the word "code" can be hidden as OTP.
-- Canaries are caught by exact (or space/dash/dot-insensitive) match. An encoded, reworded or split canary is not caught by the guard.
+- Saved values are matched without word boundaries, so a saved value can be found and hidden inside a longer word or number.
+- Version strings like 1.2.3.4 are valid IPv4 addresses and are hidden as IP_ADDRESS. Postal codes after the word "code" (for example "code 560001") are hidden as OTP.
+- Canaries are caught by exact match or after removing spacing, punctuation, case, zero-width characters and JSON escapes. A base64-encoded, reworded or split canary is not caught by the guard.
 - The Haar face detector misses side profiles, small, tilted or covered faces, and can fire on face-like shapes.
-- The server listens on 0.0.0.0 with no authentication. `POST /api/config`, `POST /api/session`, `POST /api/leak-test`, `PUT /api/rules` and `POST /api/eval/run` call `local_only` and return 403 to other hosts. These stay open to anyone on the same network: `GET /api/session` (status, hidden items, events), `GET /api/session/inspect` (raw page text, outbound payload, history), `GET /api/session/image/{kind}` (including the raw screenshot `real`), `GET /api/rules` and `POST /api/session/approve` (approve or cancel the pending step). `GET /api/scenarios`, `GET /api/config` and `GET /api/eval` are also open but hold no page data.
-- Only three pathways are covered: the AI request payload, browser HTTP requests through `context.route`, and browser WebSockets through `context.route_web_socket`. Other channels (for example WebRTC) are not routed.
-- Approval is remembered per field-type group for the session. Clicks on buttons have no type, so after the user approves one irreversible click, later irreversible clicks in that session run without asking.
-- The approval trigger is a keyword match on the button label. A misleadingly named button would not ask.
+- The server listens on 0.0.0.0 with no password. `POST /api/config`, `POST /api/session`, `GET /api/session/inspect`, `GET /api/session/image/real`, `POST /api/leak-test`, `PUT /api/rules` and `POST /api/eval/run` call `local_only` and return 403 to other machines. These stay open to anyone on the same network: `GET /api/session` (status, hidden-item list, events, the approval question with the last 4 card digits), `GET /api/session/image/ai` (the blacked-out screenshot), `GET /api/rules` and `POST /api/session/approve` (approve or cancel the pending step). `GET /api/scenarios`, `GET /api/config` and `GET /api/eval` are also open but hold no page data.
+- The Host header check (`server._trusted_host`) accepts `localhost` and any bare IP address, and refuses every other host name. DNS rebinding needs a host name, so this blocks it without depending on which network adapters the PC has. Settings, session start, the leak test, the raw page text and the real screenshot also require the request to come from the computer itself, so open the app on the laptop as http://localhost:8000, not with the LAN address.
+- Covered pathways: the AI request payload, and browser network requests (HTTP through `context.route`, WebSockets through `context.route_web_socket`, WebRTC removed from pages). Channels outside the browser context are not covered. No eval scenario attempts an external request, so this pathway is proven by code and tests, not by a measured attack.
+- Approval for typing a secret is remembered per field-type group for the session (card and CVV share one group). Irreversible clicks ask every time.
+- The click approval trigger is a keyword match on the button label as a person reads it (lookalike letters and zero-width characters folded; unnamed submit buttons ask). A button with an ordinary but misleading name, such as "Continue" that pays, would not ask.
 - A page can label a free-text box as a card field; the validator would then allow a CARD token there. Approval is the remaining check.
 - A short saved value such as a CVV that appears as a whole word elsewhere makes the guard block the step (a false block, not a leak).
-- Custom rules are checked on save (`put_rules` returns 400 for an invalid pattern or one longer than 100 characters). A rules.json edited by hand is not checked this way.
+- Custom rules are checked on save (`put_rules` returns 400 for an invalid pattern, one longer than 100 characters, or one slower than 2 s on test strings). A rules.json edited by hand is not checked this way.
+- The model receives text only. The blacked-out screenshot is shown to the user, not sent.
 - Detection is regex, checksum and keyword based. It covers the tested scenarios; see eval/results.json for measured recall and precision.
