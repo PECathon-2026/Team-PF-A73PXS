@@ -1,6 +1,6 @@
 # Slides outline
 
-Ten slides. Every number comes from eval/results.json; the JSON key is in brackets. Refresh the numbers after the final eval run.
+Eleven slides. Every number comes from eval/results.json; the JSON key is in brackets. Refresh the numbers after the final eval run.
 
 ## 1. The problem
 
@@ -68,6 +68,7 @@ Speaker note: Show the switch live. Mention honestly that the blacked-out screen
 - Pay, submit, send, verify and similar clicks need the user's OK, every time, even with lookalike letters in the label.
 - Typing a card, CVV, password or OTP needs the user's OK.
 - "done" before any real step is rejected. 12 step budget, stop after 3 rejections in a row.
+- The AI can ask to read a hidden kind (`reveal`), only if the user set it to Ask permission; the user decides, for one task.
 
 Speaker note: The approval sheet works from a phone on the same Wi-Fi. First answer wins.
 
@@ -146,3 +147,15 @@ Speaker note: Say the limits out loud before a judge asks.
   - Human approval for sensitive actions. DONE
 
 Speaker note: End on the "29 without, 0 with" line. Then hand over to the demo.
+
+## 11. Added: the user decides, and it installs in one click
+
+- Privacy choices: each kind of data is Hide, Ask permission (default) or Reveal. Grouped Identity, Payments, Login, Contact, Other.
+- Ask permission: the AI asks, the user sees "Let the AI read your Aadhaar number for this task?", "Allow for this task" or "Do not share". The yes is never saved.
+- Reveal: the guard lets only that kind through. Canaries and Always hide rules stay blocked.
+- Status line names what is shared: "Aadhaar number shared with your permission".
+- Banner: "Card number hidden", with "Kept on this device" below, drops in when something new is hidden.
+- Windows app: unzip, double-click `PrivacyLens.exe`, no Python. About 230 MiB zipped, about 570 MB unzipped, because it carries its own Chromium.
+- Honest scope: the 0-leak numbers are for the default settings with nothing revealed. Gemini has not been run with the `reveal` action yet. The exe is unsigned (SmartScreen warns) and was run on our PC only.
+
+Speaker note: Show the support task "Ask support to verify my Aadhaar number." with the Mock, approve the share, point at the status line. Then start a new task and show nothing is shared any more.

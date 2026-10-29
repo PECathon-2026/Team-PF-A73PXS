@@ -8,11 +8,12 @@ Turns a raw `Snapshot` into a `SanitizedSnapshot`. Sensitive strings become plac
 - `_structural_placeholder` runs first for every element. It hides a field value or tile text because of where it sits. Registering these first means later mentions elsewhere (an image alt text, say) are caught as known vault values.
 - `_split_placeholders` looks for values in each parent's combined text (`parent_texts`), so a value split over sibling tags is hidden in every fragment.
 - `sanitize` then redacts each element's text, label and value, plus the URL (decoded first), the visible page text and the aria tree, and clears `selector`.
-- `_sensitive_boxes` collects text-match boxes, boxes of sensitive elements and of every element whose text changed, every `<video>`, `<iframe>` and `<canvas>`, images whose label matches `PERSON_IMAGE`, and faces from `find_faces` when FACE is on. `_blackout` paints them with a 2 px margin.
+- `_sensitive_boxes` collects text-match boxes, boxes of sensitive elements and of every element whose text changed, every `<video>`, `<iframe>` and `<canvas>`, images whose label matches `PERSON_IMAGE`, and faces from `find_faces`, unless FACE is shared. A kind the user shares (Reveal, or approved for this task) gets no text box and no field box; `<video>`, `<iframe>` and `<canvas>` are covered whatever the settings. `_blackout` paints them with a 2 px margin.
+- `sanitize` is called each step with `session.rules.with_shared(session.shared_types)`, so a share approved in one step takes effect from the next snapshot.
 - `hint_for` adds an optional label such as "Visa" or "IPv4", only for types where the user turned hints on.
 
 ## Likely judge questions
 1. Is the same value always the same placeholder? Yes, within a session. `Vault.add` keys on type plus the value with spaces, dashes and dots removed.
 2. Why a solid fill and not a blur? A blur can sometimes be reversed. A solid fill cannot.
-3. Does a hint leak anything? It names the kind of thing. The card brand comes from the first digit, so it does reveal that digit's range. Hints are off unless the user enables them.
-4. What if a detector type is switched off? The sanitizer will not hide it, but guard.py scans with all types on and blocks the payload. Turning a type off stops the agent rather than leaking.
+3. Does a hint leak anything? It names the kind of thing. The card brand comes from the first digit, so it does reveal that digit's range. Hints are off unless enabled in `config/rules.json` or through `PUT /api/rules`; the UI has no hint switch.
+4. What if a type is set to Reveal? The sanitizer leaves it in the text and does not box it, and the guard lets that one type through. This is the user's choice and is confirmed in the UI first. Every other type is still hidden and still checked by the guard.

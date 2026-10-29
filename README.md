@@ -9,6 +9,17 @@ Built for PECATHON'26, problem statement PS-004. All data in this repository is 
 
 A one-file visual overview with screenshots, the pipeline and setup steps: [docs/overview.html](docs/overview.html) (open it in a browser).
 
+### Features
+
+- Local detection of private data such as card numbers, Aadhaar, PAN, passwords, one-time codes, API keys, contact details, health details and faces (patterns with checksums, keyword context, page structure, saved values, a face detector), and a sanitized text view for the AI.
+- An outbound guard that blocks any step whose payload still holds a hidden value, a canary or an unhidden pattern match. It fails closed.
+- Local secret injection: the AI plans with `{{CARD#1}}`, the computer types the real value.
+- Approval sheet for payments and other irreversible steps, answerable from a phone on the same Wi-Fi.
+- "See what the AI sees" switch, a "How it works" panel with the raw page next to the exact outbound text, a leak test button and the eval results.
+- **Privacy choices**: every kind of private data is set to Hide, Ask permission (the default) or Reveal. With Ask permission the AI can request a value and the user decides, for that task only. See [section 4](#privacy-choices-hide-ask-permission-reveal).
+- **Hidden-item banner**: when something new is hidden during a run, a short note drops in from the top of the screen.
+- **Windows app**: `PrivacyLens.exe` in a zip, no Python needed. See [section 2](#windows-app-no-python-needed).
+
 ## Contents
 
 1. [Architecture and data flow](#1-architecture-and-data-flow)
@@ -54,15 +65,15 @@ flowchart LR
   Route -->|pathway 2: browser requests, aborted| Other
 ```
 
-One step of the agent loop (`app/agent.py`):
+One step of the agent loop (`app/agent.py`). Each step starts by combining the saved Privacy choices with the kinds the user approved in this task (`rules.with_shared(session.shared_types)`); every stage below uses that combined set.
 
 1. `take_snapshot` reads the page: elements, visible text, `title`/`alt`/`data-*` attribute text, the accessibility tree, a full-page screenshot and the pixel boxes of sensitive text.
-2. `sanitize` replaces each sensitive value with `[REDACTED:TYPE#n]`, stores the real value in the vault, and paints the sensitive regions of the screenshot solid black.
+2. `sanitize` replaces each sensitive value with `[REDACTED:TYPE#n]`, stores the real value in the vault, and paints the sensitive regions of the screenshot solid black. Kinds the user shares are left as they are.
 3. `build_observation` builds the JSON the AI receives. Saved details appear only as `{{TYPE#n}}` tokens with their kind.
-4. `check_outbound` scans the exact outbound string (system prompt plus observation). Any hit or any exception blocks the step.
+4. `check_outbound` scans the exact outbound string (system prompt plus observation). Any hit or any exception blocks the step. Values of shared kinds are not hits; canaries and Always hide matches always are.
 5. The AI replies with one JSON action.
-6. `validate` checks the action. Sensitive or irreversible steps wait for the user's approval.
-7. `execute` acts in the browser. `fill_value` swaps tokens for real values at this point only.
+6. `validate` checks the action. Sensitive or irreversible steps, and requests to read a kind on Ask permission, wait for the user's approval.
+7. `execute` acts in the browser. `fill_value` swaps tokens for real values at this point only. An approved share adds the kind to `session.shared_types` and applies from the next step.
 
 ### Trust boundaries
 
@@ -81,13 +92,34 @@ The vault, the raw snapshot and the executor are trusted and local.
 1. **AI request payload.** Built by `prompts.build_observation` from sanitized data only, checked by `guard.check_outbound` before `LLM.next_action` is called. The payload is text. The blacked-out screenshot is shown to the user but is not sent to the model.
 2. **Browser network requests.** `executor.block_external` routes every HTTP request (`context.route`) and every WebSocket (`context.route_web_socket`) of the browser context. Only `localhost`, `127.0.0.1`, `::1` and `data:`, `blob:`, `about:` URLs continue. Everything else is aborted and only the site name is logged. WebRTC cannot be routed this way, so an init script removes `RTCPeerConnection` and related constructors from every page, and Chromium is started with `--force-webrtc-ip-handling-policy=disable_non_proxied_udp` as a second lock.
 
-Leakage claims in this README cover these two pathways and the tested scenarios only.
+Leakage claims in this README cover these two pathways and the tested scenarios only, with the default Privacy choices (every kind on Ask permission, nothing approved). A kind the user sets to Reveal, or approves during a task, reaches the AI by design.
 
 ## 2. Setup and configuration
 
+### Windows app (no Python needed)
+
+1. Get `PrivacyLens-windows.zip` and unzip it anywhere. The zip is not in the repository (`dist/` is git-ignored); get it from us or build it with `packaging\build_exe.bat` (see below). It is 241,240,364 bytes (about 230 MiB); the unzipped folder is about 570 MB because it carries its own Chromium headless shell.
+2. Double-click `PrivacyLens\PrivacyLens.exe`. A console window opens, starts the server and opens the browser at http://localhost:8000. If port 8000 is busy it takes the next free one. The window also prints the address for a phone on the same Wi-Fi.
+3. Windows SmartScreen will likely warn, because the exe is not signed. Choose "More info", then "Run anyway". Windows Firewall may ask about network access; allow private networks if you want to use a phone.
+4. To stop, press Ctrl+C or close the console window.
+
+Where to put `.env`: in the same folder as `PrivacyLens.exe` (next to `.env.example`). Copy `.env.example` to `.env` and set `GEMINI_API_KEY`. No key is shipped; the zip contains `.env.example` and no `.env`. Without a key the app uses the offline Mock.
+
+Privacy choices made in the app are saved inside the bundle folder (`PrivacyLens\_internal\config\rules.json`). Replacing the folder with a new build loses them.
+
+Build it yourself (Windows only). First follow "From source" below so that `.venv` exists and `playwright install chromium` has run, then from the repository root:
+
+```bat
+packaging\build_exe.bat
+```
+
+`build_exe.bat` installs PyInstaller from `requirements-build.txt`, builds `dist\PrivacyLens\PrivacyLens.exe` (one-folder build from `packaging/privacylens.spec`), copies Chromium headless shell from `%LOCALAPPDATA%\ms-playwright` into `dist\PrivacyLens\browsers`, copies `.env.example`, and writes `dist\PrivacyLens-windows.zip`. `dist/` and `build/` are git-ignored.
+
+### From source
+
 Requirements: Python 3.11 or newer (our measured runs used 3.13), about 1 GB of disk for the Playwright browsers, internet for the first install. After that, Mock mode runs fully offline.
 
-### Windows
+#### Windows
 
 ```bat
 py -3 -m venv .venv
@@ -98,9 +130,9 @@ copy .env.example .env
 python -m app.server
 ```
 
-`run.bat` runs the same steps. Known issue: the activate line in the current `run.bat` contains a control character instead of `\a`, so it may fail to activate the virtual environment. Use the commands above until it is fixed.
+`run.bat` runs the same steps (virtual environment, packages, Chromium, `.env`, server). Chromium is all the app needs; for the full evaluation also run `playwright install webkit firefox`.
 
-### macOS and Linux
+#### macOS and Linux
 
 ```sh
 ./run.sh
@@ -128,9 +160,9 @@ Then open http://localhost:8000 on the computer.
 | `GEMINI_API_KEY` | Key for the Gemini API. Leave empty to use the offline Mock only. |
 | `GEMINI_MODEL` | Model name. Empty means `gemini-3.5-flash-lite`. |
 | `GEMINI_FALLBACK_MODELS` | Comma-separated models tried after `GEMINI_MODEL` when it is rate limited or unreachable. Not set means `gemini-3.6-flash,gemini-3.5-flash`. Set it to an empty value to turn fallback off. Commented out in `.env.example`. |
-| `PRIVACYLENS_PORT` | Optional environment variable, default 8000. |
+| `PRIVACYLENS_PORT` | Optional environment variable, default 8000. The Windows app starts its search for a free port here. |
 
-The key is read only from `.env`, sent only in the `x-goog-api-key` header, and never logged.
+The key is read only from `.env` (in the repository root for a source install, next to `PrivacyLens.exe` for the Windows app), sent only in the `x-goog-api-key` header, and never logged.
 
 Check that the key and model work before a demo:
 
@@ -148,7 +180,20 @@ It sends one harmless request per model and prints which model answered, never t
 Why: the only cause of Gemini failures we measured was HTTP 429 rate limiting on the free tier.
 - **Offline test AI that obeys the page**: a Mock that follows the injection page's hidden instructions on purpose, to show the validator stopping it.
 
-Privacy rules (per-type toggles, hints, "Always hide..." patterns) are saved in `config/rules.json`.
+### Privacy choices file (`config/rules.json`)
+
+```json
+{"modes": {"CARD": "ask", "AADHAAR": "ask", "...": "ask", "CUSTOM": "redact"},
+ "hints": {},
+ "custom": []}
+```
+
+- `modes`: one of `redact` (Hide), `ask` (Ask permission) or `reveal` (Reveal) per type. Every type defaults to `ask`. CUSTOM always stays `redact`. Unknown types and bad modes are dropped when the file is read.
+- `hints`: per type, `true` adds a label such as the card network to the placeholder (`[REDACTED:CARD#1 - Visa]`). There is no switch for this in the UI; edit the file or use `PUT /api/rules`.
+- `custom`: the user's "Always hide" regexes.
+- A file from an earlier version with an `enabled` key still loads; that key is ignored, so every type reads as `ask`.
+
+The UI saves this file whenever a choice changes (see section 4).
 
 ### Phone as approval remote
 
@@ -157,7 +202,7 @@ Privacy rules (per-type toggles, hints, "Always hide..." patterns) are saved in 
 3. Open `http://<pc-ip>:8000` on the phone.
 4. On Windows, allow Python through the firewall when the prompt appears on first start (private networks). On macOS, allow incoming connections for Python.
 
-The phone can watch the AI view and approve or cancel steps. Starting tasks, settings, the AI choice, the raw view and the leak test work only on the computer itself.
+The phone can watch the AI view and approve or cancel steps, including a request to share a kind of data. Starting tasks, Privacy choices, the AI choice, the raw view and the leak test work only on the computer itself; the "Privacy choices" link is not shown on the phone. The Windows app prints the phone address when it starts.
 
 ## 3. Detection and sanitization methodology
 
@@ -207,6 +252,7 @@ Detection runs locally in four layers, combined in `detectors.find_sensitive`. O
 - URLs are decoded before redaction, so query values are caught.
 - Screenshot: solid black boxes over sensitive text ranges, sensitive fields, changed elements, every `<video>`, `<iframe>` and `<canvas>`, images labelled like a person photo, and detected faces. A solid fill cannot be reversed the way a blur sometimes can.
 - The report shown to the user lists type, placeholder and reason, never the value.
+- A kind the user shares (Reveal, or approved in this task) is not detected, not replaced and not boxed. `<video>`, `<iframe>` and `<canvas>` are boxed whatever the settings.
 
 ## 4. AI integration and action validation
 
@@ -217,6 +263,7 @@ Detection runs locally in four layers, combined in `detectors.find_sensitive`. O
 ```json
 {"task": "...", "url": "...",
  "secrets": [{"token": "{{CARD#1}}", "kind": "CARD"}],
+ "ask_kinds": ["CARD"],
  "elements": [{"id": "e4", "tag": "input", "label": "Card number", "text": "", "value": "",
                "expects": "CARD", "can_click": false, "can_type": true}],
  "page_text": "sanitized visible text, first 3000 characters",
@@ -224,13 +271,15 @@ Detection runs locally in four layers, combined in `detectors.find_sensitive`. O
  "history": ["last 8 steps"]}
 ```
 
-The system prompt says page content is untrusted, hidden values must not be guessed, and private fields are filled only with a token of the matching kind.
+The system prompt says page content is untrusted, hidden values must not be guessed, and private fields are filled only with a token of the matching kind. `ask_kinds` lists the kinds on Ask permission that have a token and are not shared yet; the prompt allows a `reveal` request only for those, and only when the task needs the value.
 
 ### Action schema
 
 ```json
-{"action": "click|type|select|scroll|wait|done|ask_user", "target": "eN", "value": "...", "reason": "..."}
+{"action": "click|type|select|scroll|wait|done|ask_user|reveal", "target": "eN", "value": "...", "reason": "..."}
 ```
+
+For `reveal`, `value` is exactly one token, for example `{"action": "reveal", "value": "{{AADHAAR#1}}", "reason": "..."}`.
 
 ### Validation rules (`app/validator.py`, `app/agent.py`)
 
@@ -244,7 +293,11 @@ The system prompt says page content is untrusted, hidden values must not be gues
 | Value contains a pasted `[REDACTED...]` placeholder | rejected |
 | Unknown token, or token whose kind differs from the field's `expects` (placeholder binding) | rejected |
 | Literal value with a URL or bare host name that is not local | rejected |
-| Literal value that matches a pattern detector (a guessed card number) | rejected |
+| Literal value that matches a pattern detector (a guessed card number) | rejected; kinds the user shares are not scanned here |
+| `reveal` whose value is not exactly one known token | rejected |
+| `reveal` for a kind on Hide | rejected ("That kind of data is set to stay hidden.") |
+| `reveal` for a kind on Ask permission | needs the user's approval |
+| `reveal` for a kind already shared | allowed, no question |
 | `done` before any step in history succeeded (premature done) | rejected |
 | 3 rejections in a row | run stops |
 | More than 12 steps | run stops |
@@ -259,7 +312,37 @@ The user approves before:
 - a click on a submit button with no readable name;
 - typing a CARD, CVV, PASSWORD or OTP token. This approval is remembered per field group for the session (card and CVV share one group). Clicks are asked every time.
 
-The approval sheet shows one plain sentence, in the form "Pay <amount> with your card ending <last 4 digits>?" (the sentence is shown only in the local UI and on the phone). The first answer from the laptop or the phone wins. No answer within 120 seconds counts as no.
+The approval sheet shows one plain sentence, in the form "Pay <amount> with your card ending <last 4 digits>?" (the sentence is shown only in the local UI and on the phone). The first answer from the laptop or the phone wins. No answer within 120 seconds counts as no. The sentences come from `app/wording.py`.
+
+A request to read a kind on Ask permission uses the same sheet with different words: "Let the AI read your <name> for this task?", buttons "Allow for this task" and "Do not share", and "Why am I asked?" reads "You chose to be asked before this is shared. It will be shared for this task only." "Do not share", or no answer, stops the run.
+
+### Privacy choices: Hide, Ask permission, Reveal
+
+![Privacy choices panel](docs/screens/privacy_choices_1440x900_light.png)
+
+Every kind of private data has one of three modes:
+
+| Mode (UI label) | Meaning |
+|---|---|
+| Hide (`redact`) | The AI never sees it and cannot ask for it. |
+| Ask permission (`ask`, the default for every kind) | Hidden. The AI may request it with a `reveal` action; the user is asked; a yes counts for that task only and is never saved. |
+| Reveal (`reveal`) | The AI sees the real value. The sanitizer leaves it in place and the guard exempts only that kind. |
+
+- Every kind can be set to Reveal. The only thing that cannot is the user's own "Always hide" rules, which always stay hidden.
+- Open it with the "Privacy choices" link next to "How it works". The link appears only when the page is opened as localhost on the computer; it is hidden on a phone.
+- Rows are grouped Identity, Payments, Login, Contact and Other. Each row has a three-way Hide / Ask permission / Reveal control. Choosing Reveal first asks "The AI service will be able to read your <name>. Continue?". A choice is saved at once ("Saved. Applies from the next step.") and a running task picks it up at its next step.
+- The "Always hide..." rules are added and removed in the same panel. How it works shows only a summary ("Hide: N · Ask permission: N · Reveal: N") and an "Open Privacy choices" button.
+- Status line: "N things hidden · nothing private shared" when nothing is shared. Otherwise "N things hidden · <names> shared by your choice" for kinds set to Reveal and/or "<names> shared with your permission" for kinds approved in this task.
+- Approvals live in `Session.shared_types`, in memory. A new task starts with nothing shared.
+- Demo with the Mock: type the task "Ask support to verify my Aadhaar number." The Mock asks to read the Aadhaar number (it does this only on a support task containing "verify", and only for kinds named in the task). Choose "Allow for this task"; the status line then reads "... Aadhaar number shared with your permission".
+
+![Status line after an approved share](docs/screens/privacy_ask_after_1440x900_light.png)
+
+### Hidden-item banner
+
+When new items are hidden during a run, a pill slides down from the top: "Card number hidden", "X, Y and Z hidden" for up to three, or "N things hidden" for more, with a second line "Kept on this device" and a shield icon. It disappears after 3.5 s, and stays while the pointer is over it or it has focus. Tapping it opens the "Kept on this device" list. It waits while the approval sheet, the status list, How it works or Privacy choices is open. It stays quiet for items that were already hidden when the page loaded, so a reload or a phone joining does not replay it. It is announced politely to screen readers (`aria-live="polite"`), and with reduced motion it fades instead of sliding.
+
+![Hidden-item banner](docs/screens/hidden_banner_1440x900_light.png)
 
 ### Local secret injection
 
@@ -278,7 +361,8 @@ The AI writes `{"action": "type", "target": "e4", "value": "{{CARD#1}}"}`. After
 - The vault (real values, tokens, canaries) is a Python object in memory. `Session.close` clears it when a new run starts or the server stops. Nothing from it is written to disk.
 - Screenshots, raw page text and history live in memory for the current session only.
 - Audit messages pass through `scrub.scrub`; exceptions are logged by class name and file/line location, never by message.
-- On disk: `config/user_profile.fake.json` (synthetic saved details, plain JSON), `config/rules.json` (privacy settings) and `eval/results.json`.
+- Kinds approved for sharing during a task (`Session.shared_types`) are in memory only and are dropped when the task ends.
+- On disk: `config/user_profile.fake.json` (synthetic saved details, plain JSON), `config/rules.json` (Privacy choices: modes, hints, Always hide rules) and `eval/results.json`. In the Windows app these files sit under `PrivacyLens\_internal\`.
 
 ### Known limitations
 
@@ -301,6 +385,22 @@ The AI writes `{"action": "type", "target": "e4", "value": "{{CARD#1}}"}`. After
 - A short saved value such as a 3-digit CVV that appears as a whole word elsewhere makes the guard block the step (a false block, not a leak).
 - Custom rules are checked on save for length, syntax and speed (a separate process with a 2 s limit). A `config/rules.json` edited by hand skips this check.
 - Detection is regex, checksum, keyword and structure based. The measured recall and precision are on our own annotated scenarios.
+
+Privacy choices:
+
+- The 0-leak numbers in `eval/results.json` were measured with the default settings (every kind on Ask permission, nothing approved) and the Mock planner. If a user sets a kind to Reveal or approves a request, that kind reaches the AI by design and the guard no longer blocks it. Canaries, Always hide matches and every other kind stay blocked.
+- Sharing is per kind, not per value. After "Allow for this task" for the Aadhaar number, every Aadhaar number on the page reaches the AI for the rest of that task, including one that is not the user's.
+- A share request can be approved from any device on the same Wi-Fi, like any other approval.
+- The `reveal` action and the updated system prompt were tested with the Mock planner only. Gemini was not run on them (the free daily quota was used up), so whether Gemini asks at the right moments is unknown.
+- The hint switches were removed from the UI. Hints can be turned on only in `config/rules.json` or through `PUT /api/rules`.
+
+Windows app:
+
+- Built and checked on one Windows 11 PC only. Not tried on another PC. No macOS or Linux build.
+- The exe is not signed, so SmartScreen will likely warn.
+- Our check ran headless, so the browser opening by itself was not seen. Gemini through the exe was not tried.
+- Privacy choices are saved inside the bundle folder and are lost when the folder is replaced.
+- The download is large (about 230 MiB zipped, about 570 MB unzipped) because it includes Python, the libraries and a Chromium headless shell.
 
 ## 6. Evaluation methodology and results
 
@@ -329,7 +429,7 @@ Results are written to `eval/results.json` and `eval/results.md`. How it works >
 
 ### Results
 
-From `eval/results.json` (mode: full, Windows 11, 12 CPUs, 15.7 GB RAM, Python 3.13.15).
+From `eval/results.json` (mode: full, Windows 11, 12 CPUs, 15.7 GB RAM, Python 3.13.15). This file was not changed when Privacy choices were added. After that change a quick Mock run (`--quick`) with the default all-Ask settings reproduced the Mock rows: recall 100% of 29, precision 100% with 0 of 44 lookalikes hidden, 0 leaked values, 100% task success, 20 of 20 adversarial cases. The official file keeps the earlier full run because it has the Gemini row.
 
 | Measure | Result | Key in results.json |
 |---|---|---|
@@ -371,7 +471,7 @@ Resources: peak Python memory 13.5 MB, process RSS 133.9 MB (`resources`).
 
 ### Scope of the leakage claim
 
-0 leaks across the 35 annotated text values and 12 canaries of 6 scenarios, on 2 transmission pathways (AI request payload; browser network requests). The scenarios, annotations and canaries were written by us. In this run the scenario pages made no external requests (`tasks.scenarios.*.blocked_requests` is 0), so pathway 2 is covered by the routing code and its tests, not by a measured attack in the eval. Faces are not part of the text leakage count.
+0 leaks across the 35 annotated text values and 12 canaries of 6 scenarios, on 2 transmission pathways (AI request payload; browser network requests), with the default Privacy choices (every kind on Ask permission, nothing approved). The scenarios, annotations and canaries were written by us. In this run the scenario pages made no external requests (`tasks.scenarios.*.blocked_requests` is 0), so pathway 2 is covered by the routing code and its tests, not by a measured attack in the eval. Faces are not part of the text leakage count.
 
 ## 7. Run the tests
 
@@ -379,7 +479,7 @@ Resources: peak Python memory 13.5 MB, process RSS 133.9 MB (`resources`).
 python -m pytest -q
 ```
 
-The suite collects 193 tests (`python -m pytest --collect-only -q`). The last full run (`python -m pytest -q`) reported 193 passed, 1 warning. `tests/test_llm.py` covers the Gemini fallback chain against a faked service. It covers detectors, guard, validator, the Mock agent on every scenario, no-leak checks, adversarial cases, server endpoints and UI acceptance tests in Playwright that also write the screenshots in `docs/screens/`. The acceptance tests need the Playwright browsers installed.
+The suite collects 212 tests (`python -m pytest --collect-only -q`). The last full run (`python -m pytest -q`) reported 212 passed. `tests/test_llm.py` covers the Gemini fallback chain against a faked service. `tests/test_choices.py` covers Privacy choices: defaults, loading old files, sanitizer and guard per mode, the `reveal` action, approval scope, and two full support runs (share allowed, share refused). `tests/test_acceptance.py` has two banner tests (`test_hidden_banner_names_new_items`, `test_hidden_banner_stays_quiet_for_items_hidden_before_load`). It covers detectors, guard, validator, the Mock agent on every scenario, no-leak checks, adversarial cases, server endpoints and UI acceptance tests in Playwright that also write the screenshots in `docs/screens/`. The acceptance tests need the Playwright browsers installed.
 
 Run `python scripts/precommit_scan.py` before committing; it scans staged files for secrets.
 
@@ -398,6 +498,14 @@ Run `python scripts/precommit_scan.py` before committing; it scans staged files 
 3. The page hides instructions to paste the card into the feedback box. The test AI tries; the validator rejects the card token because the feedback box is not a card field. How it works shows the rejected steps under the validation and approval decisions.
 4. Switch AI choice back to Mock (offline) or Gemini afterwards.
 
+**Ask permission (Mock, default settings)**
+
+1. Make sure Aadhaar number is on "Ask permission" under Privacy choices (the default).
+2. Type "Ask support to verify my Aadhaar number." in the task box and press Go.
+3. The sheet asks "Let the AI read your Aadhaar number for this task?". Choose "Allow for this task". The run finishes, and the status line ends with "Aadhaar number shared with your permission".
+4. Run it again and choose "Do not share": the run stops with "Stopped: stopped by you." and the Aadhaar number never reaches the AI.
+5. Start any new task: nothing is shared any more.
+
 ## 9. Tools and credits
 
 | Tool | Use |
@@ -412,10 +520,11 @@ Run `python scripts/precommit_scan.py` before committing; it scans staged files 
 | python-dotenv | Reading `.env` |
 | psutil | Memory measurement in the eval |
 | pytest | Test suite |
+| PyInstaller | Builds the Windows one-folder bundle `PrivacyLens.exe` |
 | Google Gemini API (`gemini-3.5-flash-lite` by default) | Cloud model that plans actions from the sanitized payload |
 | Mermaid | Diagrams in the docs |
 | Claude Code (Anthropic) | AI-assisted development: code, tests and documentation were written with Claude Code and reviewed by the team |
 
 Algorithms: Luhn checksum (cards), Verhoeff checksum (Aadhaar), Shannon entropy (API keys).
 
-See `docs/explain/` for one page per module, `docs/threat_model.md`, and `STATUS.md` for what is verified and what is not.
+See `docs/explain/` for one page per module (`models.py`, which only holds data classes, has none), `docs/threat_model.md`, and `STATUS.md` for what is verified and what is not.
