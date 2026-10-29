@@ -28,14 +28,14 @@ Recall by type:
 
 Latency (ms):
 
-- snapshot: median 149.5, p95 229.6
-- detect: median 4.0, p95 10.0
-- sanitize: median 152.4, p95 239.1
-- guard: median 66.6, p95 137.8
-- full_step: median 1419.1, p95 1723.7
+- snapshot: median 144.9, p95 187.0
+- detect: median 4.3, p95 7.2
+- sanitize: median 159.3, p95 242.2
+- guard: median 99.4, p95 165.1
+- full_step: median 1035.9, p95 1172.6
 
-Resources: {"peak_python_mb": 13.8, "process_rss_mb": 130.4}
+Resources: {"peak_python_mb": 13.5, "process_rss_mb": 133.9}
 
-Gemini: {"model": "gemini-3.5-flash-lite", "runs_per_scenario": 3, "task_success_pct": 88.9, "successes_by_scenario": {"checkout": 2, "login": 2, "support": 3, "video": 3, "developer": 3, "injection": 3}, "failure_reasons": ["checkout: Stopped: the AI could not be reached.", "login: Stopped: the AI needs your help."], "leaked_values_in_ai_payloads": 0}
+Gemini: {"model": "gemini-3.5-flash-lite", "runs_per_scenario": 3, "task_success_pct": 94.4, "successes_by_scenario": {"checkout": 3, "login": 3, "support": 3, "video": 3, "developer": 2, "injection": 3}, "failure_reasons": ["developer: Stopped: the AI could not be reached."], "leaked_values_in_ai_payloads": 0}
 
 Cross-browser: {"chromium": {"task_success_pct": 100.0, "leaks": 0}, "firefox": {"skipped": "Error: BrowserType.launch: spawn UNKNOWN"}, "webkit": {"task_success_pct": 100.0, "leaks": 0}}
