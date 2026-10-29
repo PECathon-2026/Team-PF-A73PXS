@@ -8,6 +8,7 @@ Last updated 2026-10-30, after adding Privacy choices, the hidden-item banner an
 |---|---|
 | The test suite has 212 tests | `python -m pytest --collect-only -q` -> "212 tests collected" (run during this pass) |
 | Full test suite passes | `python -m pytest -q` -> "212 passed" in the last full run, after the final code changes |
+| Real phone as approval remote | On 2026-10-30 a real Android phone (realme RMX3750, Chrome) opened the app at the computer's Wi-Fi address, showed the approval sheet in dark mode, and tapping Approve on the phone let the checkout finish (done, success, 12 hidden, nothing blocked). Evidence: docs/screens/real_phone_approval_sheet.png and real_phone_done_ai_view.png. The phone view loads only the AI image (the real screenshot returns 403 to non-local clients), the switch is on and locked, and the server sends Cache-Control: no-cache so phones pick up page updates. |
 | Every kind defaults to Ask permission; CUSTOM stays Hide; an old `enabled` key and bad modes are ignored | tests/test_choices.py::test_every_type_defaults_to_ask_and_custom_stays_redact, test_load_rules_ignores_enabled_and_bad_modes; config/rules.json |
 | Hide and Ask keep the value out of text, screenshot and payload; Reveal lets only that kind through sanitizer and guard | tests/test_choices.py::test_hidden_modes_keep_the_value_out, test_reveal_lets_the_value_through_sanitize_and_guard |
 | Canaries and Always hide rules stay blocked even with every kind on Reveal | tests/test_choices.py::test_canary_and_custom_rules_stay_blocked_when_everything_is_revealed; tests/test_detectors.py::test_custom_rules_stay_hidden_even_if_custom_is_marked_reveal |
@@ -51,7 +52,7 @@ Last updated 2026-10-30, after adding Privacy choices, the hidden-item banner an
 
 | Item | Why |
 |---|---|
-| Real phone on the same Wi-Fi as approval remote | Only simulated with a second browser page on one machine. Firewall prompt and Host-header address matching not tried on a real LAN. |
+| Phones other than the one tried (one Android phone, Chrome, on the phone's own hotspot): iPhone and Safari, a home router or a network that isolates devices | Not tried. Some networks block device-to-device traffic. |
 | Fresh clone set up by following only the README (P17) | macOS and Linux (`run.sh`) not run. On Windows the fresh clone was done and is under VERIFIED. |
 | `run.sh` on macOS and Linux | Not run. `run.bat` on Windows was run successfully in the fresh-clone test (see VERIFIED). |
 | `run.sh` on macOS and Linux | Not run. |

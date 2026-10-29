@@ -90,7 +90,11 @@ async def trusted_host(request: Request, call_next):
     """A web page elsewhere cannot rename itself to our address (DNS rebinding) and read the API."""
     if request.url.path.startswith("/api/") and not _trusted_host(_host_name(request)):
         return Response("unknown host", status_code=403)
-    return await call_next(request)
+    response = await call_next(request)
+    if not request.url.path.startswith("/api/"):
+        # Phones keep old scripts otherwise, so a page fix would not reach them.
+        response.headers["Cache-Control"] = "no-cache"
+    return response
 
 
 def local_only(request: Request) -> None:

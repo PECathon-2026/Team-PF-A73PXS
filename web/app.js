@@ -27,6 +27,8 @@ const CHOICE_NAMES = Object.fromEntries(CHOICE_GROUPS.flatMap(([, rows]) => rows
 const SAVED = "Saved. Applies from the next step.";
 const LOCAL_ONLY = "Privacy choices can only be changed on the computer running PrivacyLens.";
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
+// A phone on the Wi-Fi may watch the AI view but never the real page, so it only ever loads the AI image.
+const IS_REMOTE = !LOCAL_HOSTS.has(location.hostname);
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, ...kids) => {
@@ -132,7 +134,7 @@ function refreshImages(s) {
   if (key === app.imageKey) return;
   app.imageKey = key;
   const stamp = Date.now();
-  ["real", "ai"].forEach((kind) => {
+  (IS_REMOTE ? ["ai"] : ["real", "ai"]).forEach((kind) => {
     const loader = new Image();
     loader.onload = () => { $(`img-${kind}`).src = loader.src; };
     loader.src = `/api/session/image/${kind}?t=${stamp}`;
@@ -680,6 +682,11 @@ function leakTestControls() {
 function init() {
   $("task-form").addEventListener("submit", startTask);
   $("ai-view").addEventListener("change", toggleAiView);
+  if (IS_REMOTE) {
+    $("ai-view").checked = true;
+    $("ai-view").disabled = true;
+    toggleAiView();
+  }
   $("status").addEventListener("click", showStatusDetails);
   $("status-sheet").querySelector("[data-close]").addEventListener("click", () => closeSheet("status-sheet"));
   $("approve").addEventListener("click", () => answer(true));
