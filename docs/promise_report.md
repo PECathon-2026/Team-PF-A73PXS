@@ -53,4 +53,4 @@ Status: PASS, PARTIAL, FAIL, NOT DONE. NOT VERIFIED is used where the work exist
 | 14 | "How it works" view | test_how_it_works_view; docs/screens/14_how_1440x900_light.png | PASS | |
 | 15 | Measured results | `detection.baseline` 29 vs 0, `detection.*`, `tasks.*`, `performance.*`, `resources.*`, `security.*`, `cross_browser.*` | PARTIAL | Firefox missing from cross-browser. |
 | 16 | Natural, explainable code with docs/explain pages | docs/explain/ (18 pages) | PARTIAL | Pages checked against code in the final pass; no automated style check. |
-| 17 | Fresh-clone setup works from the README | README.md section 2 | NOT VERIFIED | Not run on any OS. run.bat has a broken activate line. |
+| 17 | Fresh-clone setup works from the README | README.md section 2; run.bat; run.sh | PARTIAL | Windows: a clean `git clone` into a new folder, `run.bat` created the venv, installed dependencies and started the server (GET /api/config answered, Mock default, Gemini off without a key), then `python -m pytest -q` gave 174 passed and `python eval/run_eval.py --quick` gave 100% recall, 0 leaks. macOS and Linux (`run.sh`) not run. |

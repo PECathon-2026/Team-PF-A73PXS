@@ -125,7 +125,7 @@ Status: DONE means code and proof both exist. PARTIAL means some of it is missin
 | P14 | **"How it works" view for judges:** pipeline steps, raw vs outbound payload, validation and approval decisions, eval results, privacy settings and AI choice. | web/app.js; app/server.py `inspect`, `eval_results`, `config` | test_how_it_works_view; docs/screens/14_how_1440x900_light.png | DONE | |
 | P15 | **Measured results:** a baseline of N secrets exposed without PrivacyLens vs 0 with it, plus recall, precision, task success, latency, resources, adversarial cases and cross-browser, all from `eval/results.json`. | eval/run_eval.py | `detection.baseline`, `detection.*`, `tasks.*`, `performance.*`, `resources.*`, `security.*`, `cross_browser.*` | PARTIAL | Cross-browser lacks Firefox. |
 | P16 | **Natural, explainable code** that passes the section 2 style rules, with a `docs/explain/` page for every module. | docs/explain/ (18 pages, one per app module) | docs/explain/*.md | PARTIAL | Explain pages exist and were checked against the code after the security-fix pass; there is no automated style check. |
-| P17 | **Fresh-clone setup works** by following only the README, on Windows and on macOS/Linux. | README.md section 2; run.bat; run.sh | none | NOT VERIFIED | README exists. Nobody has done a fresh clone and followed it on Windows, macOS or Linux. run.bat has a control character in its activate line. |
+| P17 | **Fresh-clone setup works** by following only the README, on Windows and on macOS/Linux. | README.md section 2; run.bat; run.sh | Windows: clean clone, `run.bat`, `pytest -q` 174 passed, `eval/run_eval.py --quick` | PARTIAL | Verified on Windows only. `run.sh` for macOS and Linux has not been run. |
 
 ## Final-gate documents
 

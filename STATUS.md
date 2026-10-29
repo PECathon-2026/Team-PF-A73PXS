@@ -8,6 +8,7 @@ Last updated 2026-10-30 at the final documentation pass. Every VERIFIED item nam
 |---|---|
 | The test suite has 174 tests | `python -m pytest --collect-only -q` -> "174 tests collected" (run during this pass) |
 | Full test suite passes | `python -m pytest -q` -> "174 passed, 1 warning" in the last full run, after the final code changes |
+| Fresh clone works on Windows | `git clone` into a new folder, `run.bat` (venv, dependencies, server started, `/api/config` answered with Mock as default), then `python -m pytest -q` -> 174 passed and `python eval/run_eval.py --quick` -> 100% recall, 0 leaked values. |
 | PII recall 100.0% of 29 annotated values | `eval/results.json`: `detection.recall_overall_pct`, `detection.items_checked` |
 | Precision 100.0%, 0 of 44 lookalikes wrongly hidden | `detection.precision_pct`, `detection.lookalikes_checked`, `detection.lookalikes_wrongly_hidden` |
 | Baseline: 29 values exposed without PrivacyLens, 0 with | `detection.baseline` |
@@ -34,7 +35,7 @@ Last updated 2026-10-30 at the final documentation pass. Every VERIFIED item nam
 | Item | Why |
 |---|---|
 | Real phone on the same Wi-Fi as approval remote | Only simulated with a second browser page on one machine. Firewall prompt and Host-header address matching not tried on a real LAN. |
-| Fresh clone set up by following only the README (P17) | Not done on Windows, macOS or Linux. |
+| Fresh clone set up by following only the README (P17) | macOS and Linux (`run.sh`) not run. On Windows the fresh clone was done and is under VERIFIED. |
 | `run.bat` | Its activate line contains a control character (byte 0x07) where `\a` should be, so `call .venv\Scripts\activate.bat` likely fails. Not fixed in this pass; README gives manual steps. |
 | `run.sh` on macOS and Linux | Not run. |
 | Demo video | Not recorded. Script in docs/demo_script.md. |
