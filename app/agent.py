@@ -16,6 +16,7 @@ from app.validator import parse_action, validate
 from app.vault import Vault
 
 STEP_BUDGET = 12
+HISTORY_CHARS = 200
 MAX_REJECTIONS = 3
 APPROVAL_SECONDS = 120
 SCENARIO_FILES = {
@@ -55,11 +56,18 @@ class Session:
         self.page = self.context = None
 
     def emit(self, step: int, kind: str, detail: str) -> None:
-        self.events.append(AuditEvent(step, kind, scrub(detail, self.vault)))
+        self.events.append(AuditEvent(step, kind, self._safe(detail)))
 
     def block(self, step: int, reason: str) -> None:
+        reason = self._safe(reason)
         self.blocked.append(reason)
-        self.emit(step, "block", reason)
+        self.events.append(AuditEvent(step, "block", reason))
+
+    def _safe(self, text: str) -> str:
+        try:
+            return scrub(text, self.vault)
+        except Exception:
+            return "[hidden]"
 
     def answer(self, approved: bool) -> bool:
         """First answer wins, whichever device it comes from."""
@@ -143,6 +151,9 @@ async def _step(session: Session, n: int) -> str:
     session.rejections = 0
     if action.action == "done":
         return "done"
+    if action.action == "ask_user":
+        session.emit(n, "ask", "the AI asked for help")
+        return "the AI needs your help"
     return await _act(session, n, action, result, raw, san)
 
 
@@ -162,7 +173,8 @@ async def _act(session: Session, n: int, action: Action, result, raw, san) -> st
         if action.action == "type":
             session._approved_groups.add(group)
     await execute(session.page, action, raw, session.vault)
-    session.history.append({"step": n, "action": action.action, "label": label, "value": action.value, "result": "ok"})
+    session.history.append({"step": n, "action": action.action, "label": label[:HISTORY_CHARS],
+                            "value": action.value[:HISTORY_CHARS], "result": "ok"})
     session.emit(n, "execute", f"{action.action} {label}")
     await session.page.wait_for_timeout(300)
     return ""

@@ -29,7 +29,9 @@
 | AI needs a secret to fill a form | Tokens only; real value swapped in locally | `vault.Vault`, `executor.fill_value` |
 | Injection makes AI paste a secret | Token type must match field type; literal values with patterns or external URLs rejected | `validator._check_value` |
 | Irreversible actions | User approval for pay/submit/send/verify-style clicks and for typing CARD, CVV, PASSWORD, OTP | `validator.validate`, `agent._act`, `agent.Session.ask` |
-| Page exfiltrates via HTTP | Abort every non-local browser request | `executor.block_external` |
+| Page exfiltrates via HTTP or WebSocket | Abort every non-local browser request; close every non-local WebSocket (`context.route_web_socket`) | `executor.block_external` |
+| Someone on the network changes settings | Rules, AI choice, session start, leak test and eval run accept only requests from this machine (HTTP 403 otherwise) | `server.local_only` |
+| Invalid or oversized custom rule | Rejected on save with HTTP 400 | `server.put_rules`, `server._check_pattern` |
 | Agent loops | 12 step budget, 3 rejections in a row stop | `agent.STEP_BUDGET`, `agent.MAX_REJECTIONS` |
 | Secrets in logs | Scrub every audit message; only exception class names logged | `scrub.scrub`, `agent.Session.emit` |
 | API key exposure | Key read from .env, sent only as a request header | `llm.GeminiLLM` |
@@ -40,11 +42,11 @@
 - Version strings like 1.2.3.4 are valid IPv4 addresses and are hidden as IP_ADDRESS. Postal codes after the word "code" can be hidden as OTP.
 - Canaries are caught by exact (or space/dash/dot-insensitive) match. An encoded, reworded or split canary is not caught by the guard.
 - The Haar face detector misses side profiles, small, tilted or covered faces, and can fire on face-like shapes.
-- The server listens on 0.0.0.0 with no authentication. Anyone on the same network can view the raw screenshot (`/api/session/image/real`) and the raw page text (`/api/session/inspect`), approve steps, change or disable rules, switch the AI provider and start eval runs.
-- Only two pathways are covered: the AI request payload and browser HTTP requests through Playwright routing. WebSocket traffic from the page is not routed by `context.route`.
+- The server listens on 0.0.0.0 with no authentication. `POST /api/config`, `POST /api/session`, `POST /api/leak-test`, `PUT /api/rules` and `POST /api/eval/run` call `local_only` and return 403 to other hosts. These stay open to anyone on the same network: `GET /api/session` (status, hidden items, events), `GET /api/session/inspect` (raw page text, outbound payload, history), `GET /api/session/image/{kind}` (including the raw screenshot `real`), `GET /api/rules` and `POST /api/session/approve` (approve or cancel the pending step). `GET /api/scenarios`, `GET /api/config` and `GET /api/eval` are also open but hold no page data.
+- Only three pathways are covered: the AI request payload, browser HTTP requests through `context.route`, and browser WebSockets through `context.route_web_socket`. Other channels (for example WebRTC) are not routed.
 - Approval is remembered per field-type group for the session. Clicks on buttons have no type, so after the user approves one irreversible click, later irreversible clicks in that session run without asking.
 - The approval trigger is a keyword match on the button label. A misleadingly named button would not ask.
 - A page can label a free-text box as a card field; the validator would then allow a CARD token there. Approval is the remaining check.
 - A short saved value such as a CVV that appears as a whole word elsewhere makes the guard block the step (a false block, not a leak).
-- An invalid custom regex blocks every step until fixed; the server does not validate rules on save.
+- Custom rules are checked on save (`put_rules` returns 400 for an invalid pattern or one longer than 100 characters). A rules.json edited by hand is not checked this way.
 - Detection is regex, checksum and keyword based. It covers the tested scenarios; see eval/results.json for measured recall and precision.

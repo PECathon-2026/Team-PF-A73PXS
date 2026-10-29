@@ -11,7 +11,8 @@ from app.rules import Rules
 from app.vault import Vault
 
 ZERO_WIDTH = set("​‌‍⁠﻿")
-SEP = r"[ \-.\n]"
+# Any single symbol between digits; the checksums keep dates and amounts from being flagged.
+SEP = r"[\W_]"
 
 # Verhoeff, not Luhn: this is how UIDAI computes the Aadhaar check digit
 _D = [
@@ -93,7 +94,7 @@ def _p(type_: str, rx: str, reason: str, check=lambda s: True, group: int = 0, c
 # Order is priority: when two matches overlap, the earlier type wins.
 PATTERNS = [
     _p("CARD", rf"(?<!\d)\d(?:{SEP}?\d){{12,18}}(?!\d)", "digits that pass the card checksum", _card_ok),
-    _p("AADHAAR", rf"(?<!\d)[2-9]\d{{3}}{SEP}?\d{{4}}{SEP}?\d{{4}}(?!\d)(?!{SEP}\d)",
+    _p("AADHAAR", rf"(?<!\d)(?<!\d{SEP})[2-9]\d{{3}}{SEP}?\d{{4}}{SEP}?\d{{4}}(?!\d)(?!{SEP}\d)",
        "12 digits that pass the Aadhaar checksum", _aadhaar_ok),
     _p("PAN", r"(?<![A-Za-z0-9])[A-Z]{3}[ABCFGHLJPT][A-Z]\d{4}[A-Z](?![A-Za-z0-9])",
        "matches the PAN format with a valid holder-type letter"),
@@ -103,13 +104,17 @@ PATTERNS = [
     _p("API_KEY", r"(?i)\b(?:api[_ -]?key|token|secret|key)\b[^\w\n]{0,6}([A-Za-z0-9_\-+/=]{24,})",
        "long random string next to the word key, token or secret", _key_ok, 1, 0.8),
     _p("PASSWORD", r"(?i)\bpass(?:word|code)?\b\s*[:=]\s*(\S+)", "value written after the word password", group=1),
-    _p("EMAIL", r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)+", "looks like an email address"),
+    # Bounded parts and a lookbehind keep a long run of letters from being rescanned at every offset.
+    _p("EMAIL", r"(?<![A-Za-z0-9._%+\-])[A-Za-z0-9._%+\-]{1,64}@[A-Za-z0-9\-]{1,63}(?:\.[A-Za-z0-9\-]{1,63}){1,8}",
+       "looks like an email address"),
+    _p("EMAIL", r"(?i)(?<![A-Za-z0-9._%+\-])[A-Za-z0-9._%+\-]{1,64}\s*[\[(]at[\])]\s*[A-Za-z0-9\-]{1,63}"
+       r"(?:\s*(?:\.|[\[(]dot[\])])\s*[A-Za-z0-9\-]{1,63}){1,8}", "an email address with at and dot spelled out"),
     _p("UPI", r"(?<![\w.])[\w.\-]{2,}@(?:ok\w+|ybl|paytm|upi|apl|ibl|axl|sbi|axisbank|hdfcbank|icici)\b(?!\.)",
        "looks like a UPI payment address"),
     _p("IFSC", r"(?<![A-Za-z0-9])[A-Z]{4}0[A-Z0-9]{6}(?![A-Za-z0-9])", "matches the IFSC bank code format"),
     _p("IP_ADDRESS", r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?!\d)(?!\.\d)", "valid IPv4 address", _is_ip),
     _p("IP_ADDRESS", r"(?<![\w:])[0-9A-Fa-f:]*:[0-9A-Fa-f:]*:[0-9A-Fa-f:]*(?![\w:])", "valid IPv6 address", _is_ip),
-    _p("PHONE", rf"(?<!\d)(?:\+91{SEP}?|0)?[6-9]\d{{4}}{SEP}?\d{{5}}(?!\d)", "Indian mobile number"),
+    _p("PHONE", rf"(?<!\d)(?<!\d{SEP})(?:\+91{SEP}?|0)?[6-9](?:{SEP}?\d){{9}}(?!\d)(?!{SEP}\d)", "Indian mobile number"),
     _p("PHONE", rf"(?<![\d+])\+\d{{1,3}}{SEP}?\(?\d{{2,4}}\)?{SEP}?\d{{3,4}}{SEP}?\d{{3,4}}(?!\d)",
        "international phone number", conf=0.85),
     _p("CVV", r"(?i)\b(?:cvv2?|cvc2?|security code)\b\D{0,12}?(?<!\d)(\d{3,4})(?!\d)",
@@ -168,20 +173,47 @@ def _custom_findings(text: str, rules: Rules) -> list[Finding]:
 
 KNOWN_MIN_LEN = 5
 KNOWN_SKIP = {"CVV", "EXPIRY"}
+KNOWN_REASON = "a detail you saved earlier"
 
 
-def _known_findings(text: str, vault: Vault) -> list[Finding]:
+def compact(text: str) -> tuple[str, list[int]]:
+    """Lowercase letters and digits only, with the index each one came from, so spacing,
+    punctuation and case cannot hide a saved value."""
+    chars: list[str] = []
+    origin: list[int] = []
+    for i, ch in enumerate(text):
+        for c in ch.lower():
+            if c.isalnum():
+                chars.append(c)
+                origin.append(i)
+    return "".join(chars), origin
+
+
+def compact_value(value: str) -> str:
+    """The same compact form for a single saved value; zero-width characters are not alphanumeric, so they drop out."""
+    return "".join(filter(str.isalnum, unicodedata.normalize("NFKC", value).lower()))
+
+
+def _known_findings(norm: str, origin: list[int], vault: Vault) -> list[Finding]:
     found = []
+    flat, flat_origin = compact(norm)
     known = [(t, v) for t, v, _ in vault.items()] + [("CUSTOM", c) for c in vault.canaries]
     for type_, value in known:
-        if len(value) < KNOWN_MIN_LEN or type_ in KNOWN_SKIP:
+        needle = compact_value(value)
+        if len(needle) < KNOWN_MIN_LEN or type_ in KNOWN_SKIP:
             continue
-        for m in re.finditer(re.escape(value), text):
-            found.append(Finding(type_, m.start(), m.end(), value, "a detail you saved earlier", "context", 1.0))
+        # No word-boundary check: page text glues neighbouring tags together ("Test User OneNext").
+        pos = flat.find(needle)
+        while pos >= 0:
+            start, end = origin[flat_origin[pos]], origin[flat_origin[pos + len(needle) - 1]] + 1
+            found.append(Finding(type_, start, end, value, KNOWN_REASON, "context", 1.0))
+            pos = flat.find(needle, pos + 1)
     return found
 
 
 def find_sensitive(text: str, rules: Rules | None = None, vault: Vault | None = None) -> list[Finding]:
+    if not text.strip():
+        return []
     rules = rules or Rules()
     norm, origin = normalize(text)
     found: list[Finding] = []
@@ -191,5 +223,5 @@ def find_sensitive(text: str, rules: Rules | None = None, vault: Vault | None = 
     found += [f for f in find_contextual(text) if rules.on(f.type)]
     found += _custom_findings(text, rules)
     if vault:
-        found += _known_findings(text, vault)
+        found += _known_findings(norm, origin, vault)
     return _resolve_overlaps(found)

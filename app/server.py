@@ -1,6 +1,8 @@
 import asyncio
 import json
 import os
+import re
+import socket
 import subprocess
 import sys
 from contextlib import asynccontextmanager
@@ -9,8 +11,6 @@ from pathlib import Path
 
 import uvicorn
 from dotenv import load_dotenv
-import re
-
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
@@ -23,6 +23,12 @@ from app.runner import task_for
 
 ROOT = Path(__file__).resolve().parent.parent
 PORT = int(os.getenv("PRIVACYLENS_PORT", "8000"))
+LOOPBACK_CLIENTS = {"127.0.0.1", "::1", "localhost"}
+LOOPBACK_NAMES = {"localhost", "127.0.0.1", "[::1]"}
+RULE_CHECK_SECONDS = 2
+# A rule that takes exponential time on one of these would freeze every snapshot, so it is refused.
+RULE_PROBES = [c * 40 + "!" for c in "aA1 .-_@x"]
+PROBE_SCRIPT = "import re, sys; rx = re.compile(sys.argv[1]); [rx.search(s) for s in sys.argv[2:]]"
 TITLES = {"checkout": "Pay for my cart", "login": "Log me in", "support": "Ask support", "video": "Mute the call",
           "developer": "Developer settings", "injection": "Leave feedback"}
 
@@ -42,7 +48,8 @@ state = State()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with async_playwright() as pw:
-        app.state.browser = await pw.chromium.launch()
+        # Proxy-only WebRTC is a second lock behind the init script that removes WebRTC from pages.
+        app.state.browser = await pw.chromium.launch(args=["--force-webrtc-ip-handling-policy=disable_non_proxied_udp"])
         yield
         if state.session:
             await state.session.close()
@@ -56,9 +63,33 @@ def _png_size(png: bytes) -> list[int]:
     return list(Image.open(BytesIO(png)).size) if png else [0, 0]
 
 
+def _lan_addresses() -> set[str]:
+    try:
+        return set(socket.gethostbyname_ex(socket.gethostname())[2])
+    except OSError:
+        return set()
+
+
+LAN_ADDRESSES = _lan_addresses()
+
+
+def _host_name(request: Request) -> str:
+    host = request.headers.get("host", "")
+    return host.rsplit(":", 1)[0] if not host.endswith("]") else host
+
+
+@app.middleware("http")
+async def trusted_host(request: Request, call_next):
+    """A web page elsewhere cannot rename itself to our address (DNS rebinding) and read the API."""
+    if request.url.path.startswith("/api/") and _host_name(request) not in LOOPBACK_NAMES | LAN_ADDRESSES:
+        return Response("unknown host", status_code=403)
+    return await call_next(request)
+
+
 def local_only(request: Request) -> None:
-    """Phones may watch and approve; changing settings or starting runs stays on this machine."""
-    if request.client and request.client.host not in ("127.0.0.1", "::1", "localhost"):
+    """Phones may watch the AI view and approve; settings, runs and raw page data stay on this machine."""
+    client = request.client.host if request.client else ""
+    if client not in LOOPBACK_CLIENTS or _host_name(request) not in LOOPBACK_NAMES:
         raise HTTPException(403, "only available on the computer running PrivacyLens")
 
 
@@ -107,7 +138,8 @@ def session_state():
 
 
 @app.get("/api/session/inspect")
-def inspect():
+def inspect(request: Request):
+    local_only(request)
     s = state.session
     if s is None:
         return {}
@@ -115,7 +147,9 @@ def inspect():
 
 
 @app.get("/api/session/image/{kind}")
-def image(kind: str):
+def image(request: Request, kind: str):
+    if kind == "real":
+        local_only(request)
     s = state.session
     png = (s.real_png if kind == "real" else s.ai_png) if s else b""
     return Response(png, media_type="image/png", headers={"Cache-Control": "no-store"})
@@ -142,6 +176,18 @@ def _check_pattern(pattern: str) -> None:
         re.compile(pattern)
     except re.error:
         raise HTTPException(400, "That rule is not a valid pattern.") from None
+    if not _pattern_is_fast(pattern):
+        raise HTTPException(400, "That rule is too slow to check pages with.")
+
+
+def _pattern_is_fast(pattern: str) -> bool:
+    """Try the rule in a separate process, which can be killed if it never finishes."""
+    try:
+        subprocess.run([sys.executable, "-c", PROBE_SCRIPT, pattern, *RULE_PROBES], timeout=RULE_CHECK_SECONDS,
+                       check=True, capture_output=True)
+    except (subprocess.TimeoutExpired, subprocess.CalledProcessError):
+        return False
+    return True
 
 
 @app.get("/api/rules")

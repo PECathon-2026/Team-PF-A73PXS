@@ -10,16 +10,25 @@ COLLECT_JS = """
 () => {
   const sx = window.scrollX, sy = window.scrollY;
   const buttonTypes = ['button', 'submit', 'reset', 'checkbox', 'radio', 'image'];
+  const parents = new Map();
+  const parentId = (p) => {
+    if (!parents.has(p)) parents.set(p, { id: 'p' + parents.size, text: (p.textContent || '').slice(0, 20000) });
+    return parents.get(p).id;
+  };
+  const pseudo = (el) => ['::before', '::after'].map(p => getComputedStyle(el, p).content)
+    .map(c => /^".*"$/.test(c) ? c.slice(1, -1) : '').join(' ').trim();
   const out = [];
   let n = 0;
   for (const el of document.body.querySelectorAll('*')) {
     if (['SCRIPT', 'STYLE', 'NOSCRIPT', 'HEAD'].includes(el.tagName)) continue;
     const tag = el.tagName.toLowerCase();
-    const own = [...el.childNodes].filter(c => c.nodeType === 3).map(c => c.textContent).join(' ').trim();
     const field = ['input', 'textarea', 'select'].includes(tag);
     const clickable = ['a', 'button', 'summary'].includes(tag) || el.hasAttribute('onclick')
       || el.getAttribute('role') === 'button' || (tag === 'input' && buttonTypes.includes(el.type));
-    if (!own && !field && !clickable && !['video', 'img'].includes(tag)) continue;
+    const ownNodes = [...el.childNodes].filter(c => c.nodeType === 3).map(c => c.textContent).join(' ').trim();
+    const shown = clickable ? (el.innerText || (tag === 'input' ? el.value : '') || '').slice(0, 500) : ownNodes;
+    const own = [shown, pseudo(el)].join(' ').trim();
+    if (!own && !field && !clickable && !['video', 'img', 'iframe', 'canvas'].includes(tag)) continue;
     const id = 'e' + (++n);
     el.setAttribute('data-pl', id);
     const r = el.getBoundingClientRect(), cs = getComputedStyle(el);
@@ -35,17 +44,24 @@ COLLECT_JS = """
       value: field ? (el.type === 'checkbox' || el.type === 'radio' ? '' : el.value || '') : '',
       box: [r.left + sx, r.top + sy, r.width, r.height],
       hidden: cs.display === 'none' || cs.visibility === 'hidden' || el.closest('[aria-hidden=true]') !== null
-        || r.width < 2 || r.height < 2 || r.right < 0 || r.left > innerWidth + 2000,
+        || !el.checkVisibility({ opacityProperty: true, visibilityProperty: true })
+        || r.width < 2 || r.height < 2 || r.right < 0 || r.left < -1000 || r.left > innerWidth + 2000,
       href: tag === 'a' ? el.href : '',
       canClick: clickable,
       canType: field && !buttonTypes.includes(el.type) && el.tagName !== 'SELECT',
+      isSubmit: ['button', 'input'].includes(tag) && ['submit', 'image'].includes(el.type),
+      parent: el.parentElement ? parentId(el.parentElement) : '',
     });
   }
   const clone = document.body.cloneNode(true);
   clone.querySelectorAll('script,style,noscript').forEach(e => e.remove());
   const attrText = [...document.body.querySelectorAll('*')].flatMap(e =>
     [...e.attributes].filter(a => /^(title|alt|data-(?!pl$).*)$/.test(a.name)).map(a => a.value));
-  return { elements: out, text: clone.textContent.replace(/[ \\t]+/g, ' ').replace(/\\n\\s*\\n+/g, '\\n'), attrText };
+  const tidy = (t) => t.replace(/[ \\t]+/g, ' ').replace(/\\n\\s*\\n+/g, '\\n');
+  return {
+    elements: out, text: tidy(clone.textContent), visible: tidy(document.body.innerText), attrText,
+    parents: Object.fromEntries([...parents.values()].map(p => [p.id, p.text])),
+  };
 }
 """
 
@@ -79,6 +95,8 @@ RANGE_BOXES_JS = """
 
 
 PARTICIPANT_NAME = re.compile(r"\b(nm|name|participant\w*)\b", re.I)
+# Detection is linear, but a hostile page can still be huge; nothing past this is read.
+MAX_TEXT = 200_000
 
 
 def _structure_of(raw: dict) -> tuple[str, str] | None:
@@ -95,11 +113,12 @@ def _to_element(raw: dict) -> Element:
     label = attrs.get("aria-label") or attrs.get("label") or attrs.get("placeholder") or attrs.get("title") \
         or attrs.get("alt") or attrs.get("name", "")
     return Element(
-        id=raw["id"], tag=raw["tag"], role=raw["role"], label=label, text=raw["own"], value=raw["value"],
+        id=raw["id"], tag=raw["tag"], role=raw["role"], label=label[:MAX_TEXT], text=raw["own"][:MAX_TEXT],
+        value=raw["value"][:MAX_TEXT],
         input_type=attrs.get("autocomplete") or attrs.get("type", ""), box=tuple(raw["box"]),
         selector=f'[data-pl="{raw["id"]}"]', sensitive_type=found[0] if found else "",
         sensitive_reason=found[1] if found else "", href=raw["href"], can_click=raw["canClick"], can_type=raw["canType"],
-        hidden=raw["hidden"],
+        hidden=raw["hidden"], is_submit=raw["isSubmit"], parent=raw["parent"],
     )
 
 
@@ -122,11 +141,13 @@ async def _text_range_boxes(page, rules: Rules, vault: Vault) -> list[tuple[str,
 async def take_snapshot(page, rules: Rules, vault: Vault) -> Snapshot:
     """Everything the agent can see on the page. Raw and local only until sanitized."""
     data = await page.evaluate(COLLECT_JS)
-    page_text = data["text"] + "\n" + "\n".join(data["attrText"])
+    attr_text = "\n".join(data["attrText"])
     return Snapshot(
-        url=page.url,
+        url=page.url[:MAX_TEXT],
         elements=[_to_element(raw) for raw in data["elements"]],
-        page_text=page_text,
+        page_text=(data["text"] + "\n" + attr_text)[:MAX_TEXT],
+        visible_text=(data["visible"] + "\n" + attr_text)[:MAX_TEXT],
+        parent_texts=data["parents"],
         aria=await page.locator("body").aria_snapshot(),
         screenshot=await page.screenshot(full_page=True),
         text_boxes=await _text_range_boxes(page, rules, vault),

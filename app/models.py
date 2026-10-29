@@ -29,6 +29,8 @@ class Element:
     can_click: bool = False
     can_type: bool = False
     hidden: bool = False
+    is_submit: bool = False
+    parent: str = ""
 
 
 @dataclass
@@ -39,6 +41,8 @@ class Snapshot:
     aria: str
     screenshot: bytes
     text_boxes: list[tuple[str, tuple[float, float, float, float]]] = field(default_factory=list)
+    visible_text: str | None = None
+    parent_texts: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
