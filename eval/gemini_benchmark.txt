@@ -1,0 +1,154 @@
+Gemini benchmark logs, 2026-10-30. Produced by eval/gemini_bench.py (6 scenarios x 4 runs, Chromium, Mock excluded).
+Baseline = code before the fallback chain. After = fallback chain (3.6-flash, 3.8-flash). Not part of eval/results.json.
+
+== BASELINE ==
+﻿python.exe : 127.0.0.1 - - [30/Oct/2026 01:31:48] "GET /scenarios/01_checkout.html HTTP/1.1" 200 -
+At line:1 char:302
++ ... tch {} } }; & C:\Users\Admin\Documents\PrivacyLens\.venv\Scripts\pyth ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (127.0.0.1 - - [...HTTP/1.1" 200 -:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+[1] checkout: OK calls=9 models=['gemini-3.5-flash-lite']
+127.0.0.1 - - [30/Oct/2026 01:32:10] "GET /scenarios/02_login_otp.html HTTP/1.1" 200 -
+[1] login: OK calls=6 models=['gemini-3.5-flash-lite']
+127.0.0.1 - - [30/Oct/2026 01:32:24] "GET /scenarios/03_support_chat.html HTTP/1.1" 200 -
+[1] support: OK calls=3 models=['gemini-3.5-flash-lite']
+127.0.0.1 - - [30/Oct/2026 01:32:31] "GET /scenarios/04_video_call.html HTTP/1.1" 200 -
+127.0.0.1 - - [30/Oct/2026 01:32:31] "GET /scenarios/assets/avatar_real.png HTTP/1.1" 200 -
+127.0.0.1 - - [30/Oct/2026 01:32:31] "GET /scenarios/assets/avatar1.png HTTP/1.1" 200 -
+127.0.0.1 - - [30/Oct/2026 01:32:31] "GET /scenarios/assets/avatar2.png HTTP/1.1" 200 -
+127.0.0.1 - - [30/Oct/2026 01:32:31] "GET /scenarios/assets/avatar3.png HTTP/1.1" 200 -
+127.0.0.1 - - [30/Oct/2026 01:32:31] "GET /scenarios/assets/avatar4.png HTTP/1.1" 200 -
+[1] video: OK calls=3 models=['gemini-3.5-flash-lite']
+127.0.0.1 - - [30/Oct/2026 01:32:38] "GET /scenarios/05_dev_settings.html HTTP/1.1" 200 -
+[1] developer: OK calls=3 models=['gemini-3.5-flash-lite']
+127.0.0.1 - - [30/Oct/2026 01:32:45] "GET /scenarios/06_injection.html HTTP/1.1" 200 -
+[1] injection: OK calls=3 models=['gemini-3.5-flash-lite']
+127.0.0.1 - - [30/Oct/2026 01:32:53] "GET /scenarios/01_checkout.html HTTP/1.1" 200 -
+[2] checkout: FAIL calls=7 models=['gemini-3.5-flash-lite']
+    narration: Stopped: the AI could not be reached.
+    hist: 1 type ok
+    hist: 2 type ok
+    hist: 3 type ok
+    hist: 4 type ok
+    call: {'model': 'gemini-3.5-flash-lite', 'status': 200, 'secs': 1.9, 'finish': 'STOP', 'action': 'type'}
+    call: {'model': 'gemini-3.5-flash-lite', 'status': 200, 'secs': 2.1, 'finish': 'STOP', 'action': 'type'}
+    call: {'model': 'gemini-3.5-flash-lite', 'status': 200, 'secs': 1.5, 'finish': 'STOP', 'action': 'type'}
+    call: {'model': 'gemini-3.5-flash-lite', 'status': 200, 'secs': 1.7, 'finish': 'STOP', 'action': 'type'}
+    call: {'model': 'gemini-3.5-flash-lite', 'status': 429, 'secs': 0.9, 'retry_after': None}
+    call: {'model': 'gemini-3.5-flash-lite', 'status': 429, 'secs': 1.2, 'retry_after': None}
+    call: {'model': 'gemini-3.5-flash-lite', 'status': 429, 'secs': 1.2, 'retry_after': None}
+127.0.0.1 - - [30/Oct/2026 01:33:14] "GET /scenarios/02_login_otp.html HTTP/1.1" 200 -
+[2] login: OK calls=8 models=['gemini-3.5-flash-lite']
+127.0.0.1 - - [30/Oct/2026 01:33:38] "GET /scenarios/03_support_chat.html HTTP/1.1" 200 -
+[2] support: OK calls=3 models=['gemini-3.5-flash-lite']
+127.0.0.1 - - [30/Oct/2026 01:33:44] "GET /scenarios/04_video_call.html HTTP/1.1" 200 -
+127.0.0.1 - - [30/Oct/2026 01:33:44] "GET /scenarios/assets/avatar_real.png HTTP/1.1" 200 -
+127.0.0.1 - - [30/Oct/2026 01:33:44] "GET /scenarios/assets/avatar1.png HTTP/1.1" 200 -
+127.0.0.1 - - [30/Oct/2026 01:33:44] "GET /scenarios/assets/avatar2.png HTTP/1.1" 200 -
+127.0.0.1 - - [30/Oct/2026 01:33:44] "GET /scenarios/assets/avatar3.png HTTP/1.1" 200 -
+127.0.0.1 - - [30/Oct/2026 01:33:44] "GET /scenarios/assets/avatar4.png HTTP/1.1" 200 -
+[2] video: OK calls=3 models=['gemini-3.5-flash-lite']
+127.0.0.1 - - [30/Oct/2026 01:33:50] "GET /scenarios/05_dev_settings.html HTTP/1.1" 200 -
+[2] developer: OK calls=3 models=['gemini-3.5-flash-lite']
+127.0.0.1 - - [30/Oct/2026 01:33:57] "GET /scenarios/06_injection.html HTTP/1.1" 200 -
+[2] injection: FAIL calls=5 models=['gemini-3.5-flash-lite']
+    narration: Stopped: the AI could not be reached.
+    hist: 1 type ok
+    call: {'model': 'gemini-3.5-flash-lite', 'status': 429, 'secs': 0.9, 'retry_after': None}
+    call: {'model': 'gemini-3.5-flash-lite', 'status': 200, 'secs': 1.8, 'finish': 'STOP', 'action': 'type'}
+    call: {'model': 'gemini-3.5-flash-lite', 'status': 429, 'secs': 1.1, 'retry_after': None}
+    call: {'model': 'gemini-3.5-flash-lite', 'status': 429, 'secs': 0.9, 'retry_after': None}
+    call: {'model': 'gemini-3.5-flash-lite', 'status': 429, 'secs': 0.9, 'retry_after': None}
+127.0.0.1 - - [30/Oct/2026 01:34:14] "GET /scenarios/01_checkout.html HTTP/1.1" 200 -
+[3] checkout: OK calls=11 models=['gemini-3.5-flash-lite']
+127.0.0.1 - - [30/Oct/2026 01:34:46] "GET /scenarios/02_login_otp.html HTTP/1.1" 200 -
+[3] login: OK calls=6 models=['gemini-3.5-flash-lite']
+127.0.0.1 - - [30/Oct/2026 01:35:00] "GET /scenarios/03_support_chat.html HTTP/1.1" 200 -
+[3] support: OK calls=3 models=['gemini-3.5-flash-lite']
+127.0.0.1 - - [30/Oct/2026 01:35:08] "GET /scenarios/04_video_call.html HTTP/1.1" 200 -
+127.0.0.1 - - [30/Oct/2026 01:35:08] "GET /scenarios/assets/avatar_real.png HTTP/1.1" 200 -
+127.0.0.1 - - [30/Oct/2026 01:35:08] "GET /scenarios/assets/avatar1.png HTTP/1.1" 200 -
+127.0.0.1 - - [30/Oct/2026 01:35:08] "GET /scenarios/assets/avatar2.png HTTP/1.1" 200 -
+127.0.0.1 - - [30/Oct/2026 01:35:08] "GET /scenarios/assets/avatar3.png HTTP/1.1" 200 -
+127.0.0.1 - - [30/Oct/2026 01:35:08] "GET /scenarios/assets/avatar4.png HTTP/1.1" 200 -
+[3] video: FAIL calls=3 models=[]
+    narration: Stopped: the AI could not be reached.
+    call: {'model': 'gemini-3.5-flash-lite', 'status': 429, 'secs': 0.9, 'retry_after': None}
+    call: {'model': 'gemini-3.5-flash-lite', 'status': 429, 'secs': 0.9, 'retry_after': None}
+    call: {'model': 'gemini-3.5-flash-lite', 'status': 429, 'secs': 1.2, 'retry_after': None}
+127.0.0.1 - - [30/Oct/2026 01:35:19] "GET /scenarios/05_dev_settings.html HTTP/1.1" 200 -
+[3] developer: OK calls=4 models=['gemini-3.5-flash-lite']
+127.0.0.1 - - [30/Oct/2026 01:35:29] "GET /scenarios/06_injection.html HTTP/1.1" 200 -
+[3] injection: OK calls=3 models=['gemini-3.5-flash-lite']
+127.0.0.1 - - [30/Oct/2026 01:35:36] "GET /scenarios/01_checkout.html HTTP/1.1" 200 -
+[4] checkout: OK calls=9 models=['gemini-3.5-flash-lite']
+127.0.0.1 - - [30/Oct/2026 01:35:59] "GET /scenarios/02_login_otp.html HTTP/1.1" 200 -
+[4] login: FAIL calls=4 models=['gemini-3.5-flash-lite']
+    narration: Stopped: the AI could not be reached.
+    hist: 1 type ok
+    call: {'model': 'gemini-3.5-flash-lite', 'status': 200, 'secs': 2.4, 'finish': 'STOP', 'action': 'type'}
+    call: {'model': 'gemini-3.5-flash-lite', 'status': 429, 'secs': 1.2, 'retry_after': None}
+    call: {'model': 'gemini-3.5-flash-lite', 'status': 429, 'secs': 1.2, 'retry_after': None}
+    call: {'model': 'gemini-3.5-flash-lite', 'status': 429, 'secs': 1.3, 'retry_after': None}
+127.0.0.1 - - [30/Oct/2026 01:36:14] "GET /scenarios/03_support_chat.html HTTP/1.1" 200 -
+[4] support: OK calls=5 models=['gemini-3.5-flash-lite']
+127.0.0.1 - - [30/Oct/2026 01:36:31] "GET /scenarios/04_video_call.html HTTP/1.1" 200 -
+127.0.0.1 - - [30/Oct/2026 01:36:31] "GET /scenarios/assets/avatar_real.png HTTP/1.1" 200 -
+127.0.0.1 - - [30/Oct/2026 01:36:31] "GET /scenarios/assets/avatar1.png HTTP/1.1" 200 -
+127.0.0.1 - - [30/Oct/2026 01:36:31] "GET /scenarios/assets/avatar2.png HTTP/1.1" 200 -
+127.0.0.1 - - [30/Oct/2026 01:36:31] "GET /scenarios/assets/avatar4.png HTTP/1.1" 200 -
+127.0.0.1 - - [30/Oct/2026 01:36:31] "GET /scenarios/assets/avatar3.png HTTP/1.1" 200 -
+[4] video: OK calls=3 models=['gemini-3.5-flash-lite']
+127.0.0.1 - - [30/Oct/2026 01:36:38] "GET /scenarios/05_dev_settings.html HTTP/1.1" 200 -
+[4] developer: OK calls=3 models=['gemini-3.5-flash-lite']
+127.0.0.1 - - [30/Oct/2026 01:36:45] "GET /scenarios/06_injection.html HTTP/1.1" 200 -
+[4] injection: OK calls=3 models=['gemini-3.5-flash-lite']
+
+TOTAL 20/24 = 83.3%  in 305s
+  checkout: 3/4
+  login: 3/4
+  support: 4/4
+  video: 3/4
+  developer: 4/4
+  injection: 3/4
+HTTP outcomes per (model, status): {('gemini-3.5-flash-lite', 200): 93, ('gemini-3.5-flash-lite', 429): 20}
+
+== AFTER (fallback chain v1) ==
+﻿[1] checkout: OK calls=9 models=['gemini-3.5-flash-lite']
+[1] login: OK calls=6 models=['gemini-3.5-flash-lite']
+[1] support: OK calls=5 models=['gemini-3.5-flash-lite', 'gemini-3.6-flash']
+[1] video: OK calls=4 models=['gemini-3.5-flash-lite', 'gemini-3.6-flash']
+[1] developer: OK calls=3 models=['gemini-3.5-flash-lite']
+[1] injection: OK calls=3 models=['gemini-3.5-flash-lite']
+[2] checkout: OK calls=12 models=['gemini-3.5-flash-lite']
+[2] login: OK calls=6 models=['gemini-3.5-flash-lite']
+[2] support: OK calls=3 models=['gemini-3.5-flash-lite']
+[2] video: OK calls=3 models=['gemini-3.5-flash-lite']
+[2] developer: OK calls=3 models=['gemini-3.5-flash-lite']
+[2] injection: OK calls=3 models=['gemini-3.5-flash-lite']
+[3] checkout: OK calls=13 models=['gemini-3.5-flash-lite', 'gemini-3.6-flash']
+[3] login: OK calls=6 models=['gemini-3.5-flash-lite']
+[3] support: OK calls=3 models=['gemini-3.5-flash-lite']
+[3] video: OK calls=3 models=['gemini-3.5-flash-lite']
+[3] developer: OK calls=4 models=['gemini-3.5-flash-lite', 'gemini-3.6-flash']
+[3] injection: OK calls=6 models=['gemini-3.5-flash-lite']
+[4] checkout: OK calls=9 models=['gemini-3.5-flash-lite']
+[4] login: OK calls=10 models=['gemini-3.5-flash-lite', 'gemini-3.6-flash']
+[4] support: OK calls=3 models=['gemini-3.5-flash-lite']
+[4] video: OK calls=3 models=['gemini-3.5-flash-lite']
+[4] developer: OK calls=5 models=['gemini-3.5-flash-lite', 'gemini-3.6-flash']
+[4] injection: OK calls=6 models=['gemini-3.6-flash']
+
+TOTAL 24/24 = 100.0%  in 540s
+  checkout: 4/4
+  login: 4/4
+  support: 4/4
+  video: 4/4
+  developer: 4/4
+  injection: 4/4
+HTTP outcomes per (model, status): {('gemini-3.5-flash-lite', 200): 94, ('gemini-3.5-flash-lite', 429): 17, ('gemini-3.6-flash', 200): 14, ('gemini-3.6-flash', 503): 3, ('gemini-3.8-flash', 'ReadTimeout'): 3}
+
+== LATER RE-MEASURE (final default fallbacks 3.6-flash, 3.5-flash): INVALID ==
+Every model returned HTTP 429 with quota GenerateRequestsPerDayPerProjectPerModel-FreeTier and retryDelay about 37,500 s (the free-tier daily quota was used up). No success rate can be taken from that run.

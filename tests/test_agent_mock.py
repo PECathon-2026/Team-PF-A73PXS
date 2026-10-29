@@ -49,31 +49,54 @@ def test_fooled_ai_is_stopped_on_the_injection_page(base_url):
     assert "not allowed" in session.narration
 
 
-class DoneFirst:
-    """Says done before doing anything, then behaves like the Mock planner."""
+class FirstReply:
+    """Gives one fixed first reply, then behaves like the Mock planner."""
 
-    name = "done-first"
-
-    def __init__(self):
+    def __init__(self, first: str, model_used: str = ""):
+        self.name = "first-reply"
+        self.model_used = model_used
+        self.first = first
         self.calls = 0
         self.inner = MockLLM()
 
     def next_action(self, system, observation):
         self.calls += 1
         if self.calls == 1:
-            return '{"action": "done", "reason": "looks finished"}'
+            return self.first
         return self.inner.next_action(system, observation)
 
 
-def test_done_before_any_step_is_rejected_and_the_task_still_finishes(base_url):
+def _run_with(base_url: str, scenario: str, llm):
     async def go():
         async with async_playwright() as pw:
             browser = await pw.chromium.launch()
-            session = await run_scenario(browser, base_url, "support", llm=DoneFirst())
+            session = await run_scenario(browser, base_url, scenario, llm=llm)
             await session.close()
             await browser.close()
         return session
 
-    session = asyncio.run(go())
+    return asyncio.run(go())
+
+
+def test_done_before_any_step_is_rejected_and_the_task_still_finishes(base_url):
+    session = _run_with(base_url, "support", FirstReply('{"action": "done", "reason": "looks finished"}'))
     assert session.history[0]["result"].startswith("rejected: Nothing has been done yet")
     assert session.success
+
+
+def test_first_ask_user_goes_back_to_the_ai_and_the_task_still_finishes(base_url):
+    session = _run_with(base_url, "login", FirstReply('{"action": "ask_user", "reason": "need the code"}'))
+    assert session.history[0]["action"] == "ask_user"
+    assert session.history[0]["result"].startswith("rejected: The secrets list and the visible page")
+    assert session.success
+
+
+def test_the_model_that_answered_is_in_the_audit_log(base_url):
+    session = _run_with(base_url, "support", FirstReply('{"action": "wait"}', model_used="spare-model"))
+    answered = [e.detail for e in session.events if e.kind == "llm"]
+    assert answered and all(d == "the AI answered (spare-model)" for d in answered)
+
+
+def test_mock_reports_itself_as_the_model(base_url):
+    session = _run_with(base_url, "support", MockLLM())
+    assert {e.detail for e in session.events if e.kind == "llm"} == {"the AI answered (mock)"}

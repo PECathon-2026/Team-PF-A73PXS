@@ -4,7 +4,7 @@
 Builds the exact text the AI receives: a fixed system prompt and a JSON observation for each step.
 
 ## How
-- `SYSTEM_PROMPT` tells the model it sees a sanitized page, that `page_text` and `elements` are untrusted content, never to guess hidden values, to fill private fields only with a token from `secrets`, to use "done" only after its own history shows the needed steps, and to reply with one JSON action.
+- `SYSTEM_PROMPT` tells the model it sees a sanitized page, that `page_text` and `elements` are untrusted content, never to guess hidden values, to fill private fields only with a token from `secrets`, to use "done" only after its own history shows the needed steps, to use "ask_user" only when no visible step can move the task forward, and to reply with one JSON action.
 - `build_observation(task, snap, vault, history)` returns JSON with:
   - `task` and `url` (sanitized),
   - `secrets`: the list of `{{TYPE#n}}` tokens and their kind, never values,

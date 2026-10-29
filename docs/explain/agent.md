@@ -6,7 +6,8 @@ Runs the loop: look at the page, sanitize, check, ask the AI, validate, maybe as
 ## How
 - `Session` creates a fresh `Vault`, loads the fake profile and canaries into it, wraps the planner in `RecordingLLM`, and keeps events, history, screenshots and the approval state. `start` opens a browser context with `block_external` and loads the scenario page. `close` closes it and clears the vault.
 - `_step` takes a snapshot, sanitizes it, builds the observation, runs `check_outbound` on the full payload, calls the AI, parses and validates the reply.
-- `_check` rejects `done` when no earlier step in history succeeded (premature done), then calls `validate`.
+- `_check` rejects `done` when no earlier step in history succeeded (premature done). It also rejects the first `ask_user` of a run with feedback that the secrets list and visible page are all the AI gets, so it takes the next visible step (for example signing in before the one-time code exists); a second `ask_user` stops the run with "the AI needs your help". Then it calls `validate`.
+- Each "llm" audit event names the model that answered, for example "the AI answered (gemini-3.5-flash-lite)", so a fallback model is never used silently.
 - `_act` asks for approval when the validator says so, then calls `execute`. Approval for typing is remembered per field type group (CARD and CVV share the "payment" group). Clicks that need approval ask every time.
 - `run` loops for up to `STEP_BUDGET` (12) steps. Any exception other than `LLMError` blocks the step and stops ("step failed safely"). `_check_success` reads `data-done` and `data-leak` flags that the fake pages set.
 - `ask` waits up to 120 seconds for `answer`; no answer means no.
@@ -33,3 +34,4 @@ flowchart LR
 4. Who decides success? The fake page itself, through its `data-done` and `data-leak` attributes.
 5. Is approval asked every time? For typing a secret, once per field group per session. For irreversible clicks, every time.
 6. What if the AI says "done" straight away? `_check` rejects it until at least one step has succeeded; the rejection counts toward the 3-in-a-row limit.
+7. Does rejecting the first "ask_user" weaken anything? No. The AI's next proposal still goes through the validator and the approval prompt, and a second "ask_user" stops the run.

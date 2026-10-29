@@ -34,6 +34,8 @@ TECHNICAL = re.compile(r"redacted|guard|payload|llm|token", re.I)
 TRACE_FRAMES = 3
 LEAK_CANARY = "CANARY-LEAKTEST-0"
 SECRET_WORDS = {"CARD": "card number", "CVV": "card security code", "PASSWORD": "password", "OTP": "one-time code"}
+ASK_FIRST_REJECTED = ("The secrets list and the visible page are everything you get. Take the next visible step "
+                      "yourself; ask_user again only if no step can move the task forward.")
 
 
 class Session:
@@ -132,6 +134,9 @@ def _check(action: Action | None, san: SanitizedSnapshot, session: Session) -> V
         return None
     if action.action == "done" and not any(h["result"] == "ok" for h in session.history):
         return ValidationResult(False, reason="Nothing has been done yet. Take the steps the task needs first.")
+    # The first ask_user goes back to the AI: it usually means a value appears only after a later step.
+    if action.action == "ask_user" and not any(h["action"] == "ask_user" for h in session.history):
+        return ValidationResult(False, reason=ASK_FIRST_REJECTED)
     return validate(action, san, session.vault)
 
 
@@ -152,7 +157,7 @@ async def _step(session: Session, n: int) -> str:
         return "blocked"
 
     reply = await asyncio.to_thread(session.llm.next_action, SYSTEM_PROMPT, observation)
-    session.emit(n, "llm", "the AI answered")
+    session.emit(n, "llm", f"the AI answered ({session.llm.model_used})")
     action = parse_action(reply)
     result = _check(action, san, session)
     if action is None or not result.ok:
