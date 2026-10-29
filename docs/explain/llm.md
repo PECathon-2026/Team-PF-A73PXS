@@ -15,4 +15,4 @@ Provides the planners that choose the next action. All of them expose `next_acti
 3. Why a Mock? It makes tests and the demo repeatable and offline. It only reads the sanitized observation, the same input Gemini gets.
 4. What if Gemini returns garbage? `parse_action` in validator.py returns None, the step is recorded as rejected, and after 3 rejections in a row the run stops.
 5. Does it retry on every error? No. Network errors, 429 and 5xx are retried; other 4xx errors (bad key, bad model name) stop at once.
-6. How well does Gemini do? See `gemini.task_success_pct` in eval/results.json: 88.9% over 3 runs per scenario, with 0 leaked values.
+6. How well does Gemini do? See `gemini.task_success_pct` in eval/results.json: 94.4% over 3 runs per scenario, with 0 leaked values.

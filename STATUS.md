@@ -6,17 +6,18 @@ Last updated 2026-10-30 at the final documentation pass. Every VERIFIED item nam
 
 | Item | Proof |
 |---|---|
-| The test suite has 167 tests | `python -m pytest --collect-only -q` -> "167 tests collected" (run during this pass, after tests/test_server.py and new guard and detector tests were added) |
-| Full test suite passes | `python -m pytest -q` -> 153 passed in the team's last full run, before 14 more tests were added. The current 167 have not been run as a full suite during the documentation pass. |
+| The test suite has 174 tests | `python -m pytest --collect-only -q` -> "174 tests collected" (run during this pass) |
+| Full test suite passes | `python -m pytest -q` -> "174 passed, 1 warning" in the last full run, after the final code changes |
 | PII recall 100.0% of 29 annotated values | `eval/results.json`: `detection.recall_overall_pct`, `detection.items_checked` |
 | Precision 100.0%, 0 of 44 lookalikes wrongly hidden | `detection.precision_pct`, `detection.lookalikes_checked`, `detection.lookalikes_wrongly_hidden` |
 | Baseline: 29 values exposed without PrivacyLens, 0 with | `detection.baseline` |
 | 0 annotated values or canaries in Mock AI payloads, 6 scenarios | `tasks.leaked_values_in_ai_payloads`; tests/test_no_leak.py |
 | Mock task success 100.0% | `tasks.task_success_pct` |
-| Gemini task success 88.9% (gemini-3.5-flash-lite, 3 runs per scenario), 0 leaked values | `gemini.task_success_pct`, `gemini.runs_per_scenario`, `gemini.leaked_values_in_ai_payloads` |
+| Gemini task success 94.4% (17 of 18 runs, gemini-3.5-flash-lite, 3 runs per scenario), 0 leaked values; the one failure was "developer: Stopped: the AI could not be reached." (service error) | `gemini.successes_by_scenario`, `gemini.failure_reasons`, `gemini.task_success_pct`, `gemini.runs_per_scenario`, `gemini.leaked_values_in_ai_payloads` |
 | 20 of 20 adversarial cases pass | `security.passed`, `security.total` |
 | A raw unsanitized page is blocked by the guard | `security.raw_page_blocked_by_guard` |
 | The injection page does not get the card pasted; 3 attempts rejected | `security.injection.card_pasted_into_feedback`, `security.injection.attempts_rejected_by_validator`; tests/test_agent_mock.py::test_fooled_ai_is_stopped_on_the_injection_page |
+| eval/results.json is from the final full eval run (mode: full) | `eval/results.json` `mode` |
 | Latency and memory measured | `performance.*`, `resources.*` |
 | Chromium and WebKit: 100.0% success, 0 leaks | `cross_browser.chromium`, `cross_browser.webkit` |
 | Leak test button blocks a planted canary and the status line shows it | tests/test_acceptance.py::test_leak_test_and_stopped_message; docs/screens/9_leak_1440x900_light.png |
@@ -45,4 +46,3 @@ Last updated 2026-10-30 at the final documentation pass. Every VERIFIED item nam
 | Browser pathway against a real exfiltration attempt in the eval | No scenario page tries an external request (`tasks.scenarios.*.blocked_requests` = 0). No test fires an external HTTP or WebSocket request at `block_external`. |
 | Gemini behaviour beyond the measured runs | Only 3 runs per scenario on one model. |
 | Style rules across all code | No automated style check. |
-| eval/results.json against the final code | The file is from a full run before the last code changes (guard escape decoding, outline in the observation, eval matching). Re-run `python eval/run_eval.py` to confirm the numbers still hold. |

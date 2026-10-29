@@ -3,7 +3,7 @@
 Every row is one bullet from docs/ps004_and_promises.md, copied verbatim. Appendix A is the PS-004 problem statement; Appendix B is our 17 product promises.
 
 Evidence rules:
-- Tests are listed by name from `python -m pytest --collect-only -q` (167 tests collected).
+- Tests are listed by name from `python -m pytest --collect-only -q` (174 tests collected).
 - Numbers are only those in eval/results.json, cited by key.
 - Screenshots are in docs/screens/.
 
@@ -31,8 +31,8 @@ Status: DONE means code and proof both exist. PARTIAL means some of it is missin
 
 | ID | Requirement (verbatim) | Implemented in | Proof | Status | Note |
 |---|---|---|---|---|---|
-| C1 | Integrate an LLM, VLM, or another suitable AI model to reason over sanitized information. | app/llm.py `GeminiLLM`, `MockLLM`, `get_llm` | tests/test_agent_mock.py::test_mock_completes_scenario; `gemini.task_success_pct` = 88.9, `gemini.leaked_values_in_ai_payloads` = 0 | DONE | Gemini (`gemini.model` = gemini-3.5-flash-lite) measured over 3 runs per scenario; success is a rate, not 100%. The model receives text only, not the screenshot. |
-| C2 | Enable the AI to understand the interface and perform tasks through suitable interaction mechanisms. | app/agent.py `run`, `_step`, `_act`; app/executor.py `execute` | tests/test_agent_mock.py::test_mock_completes_scenario; `tasks.scenarios`; `gemini.successes_by_scenario` | DONE | Mock 100.0%, Gemini 88.9%. |
+| C1 | Integrate an LLM, VLM, or another suitable AI model to reason over sanitized information. | app/llm.py `GeminiLLM`, `MockLLM`, `get_llm` | tests/test_agent_mock.py::test_mock_completes_scenario; `gemini.task_success_pct` = 94.4 (17 of 18 runs), `gemini.leaked_values_in_ai_payloads` = 0 | DONE | Gemini (`gemini.model` = gemini-3.5-flash-lite) measured over 3 runs per scenario; success is a rate, not 100%. The model receives text only, not the screenshot. |
+| C2 | Enable the AI to understand the interface and perform tasks through suitable interaction mechanisms. | app/agent.py `run`, `_step`, `_act`; app/executor.py `execute` | tests/test_agent_mock.py::test_mock_completes_scenario; `tasks.scenarios`; `gemini.successes_by_scenario` | DONE | Mock 100.0%, Gemini 94.4%. |
 | C3 | Validate proposed actions and reject invalid targets or unsafe operations. | app/validator.py `parse_action`, `validate`, `_check_value` | tests/test_validator.py (7 tests); tests/test_adversarial.py::test_hidden_elements_cannot_be_used; `security.cases` | DONE | |
 | C4 | Prevent the model from attempting to infer or reconstruct redacted information. | app/prompts.py system rule "Never guess, invent or reconstruct a hidden value."; app/validator.py `_check_value` | tests/test_validator.py::test_guessed_secret_rejected, test_unknown_token_and_pasted_placeholder_rejected | DONE | |
 | C5 | Require user approval for sensitive or irreversible actions where appropriate. | app/validator.py `validate`; app/agent.py `_act`, `Session` | tests/test_validator.py::test_approval_flags; tests/test_acceptance.py::test_approval_sheet | DONE | Typing approval is remembered per field group; irreversible clicks ask every time. The click trigger is a label match after lookalike letters and zero-width characters are removed; unnamed submit buttons also ask (test_disguised_pay_buttons_need_approval). |
@@ -64,8 +64,8 @@ Status: DONE means code and proof both exist. PARTIAL means some of it is missin
 | E1 | PII Detection Recall: How much sensitive information is detected? | eval/run_eval.py | `detection.recall_overall_pct`, `detection.recall_by_type_pct`, `detection.items_checked` | DONE | By-type recall covers 11 types; cards and passwords are covered by the leak tests, not by a recall number. |
 | E2 | Redaction Precision: How accurately is sensitive information identified without excessive redaction? | eval/run_eval.py | `detection.precision_pct`, `detection.lookalikes_checked`, `detection.lookalikes_wrongly_hidden` | DONE | |
 | E3 | Privacy Leakage: Does sensitive information appear in outgoing payloads? | eval/run_eval.py; app/guard.py | `tasks.leaked_values_in_ai_payloads`, `detection.baseline`; tests/test_no_leak.py | DONE | Zero is claimed only for the tested scenarios and pathways. |
-| E4 | Context Preservation: Can the AI still understand the interface after sanitization? | app/sanitizer.py; app/prompts.py | `tasks.task_success_pct`, `gemini.task_success_pct` | DONE | A real model (Gemini) completed 88.9% of runs on sanitized pages; Mock 100.0%. |
-| E5 | Task Success: Can the system complete its intended task? | app/agent.py; app/runner.py | `tasks.task_success_pct`, `tasks.scenarios`, `gemini.task_success_pct` | DONE | Mock 100.0%, Gemini 88.9%. |
+| E4 | Context Preservation: Can the AI still understand the interface after sanitization? | app/sanitizer.py; app/prompts.py | `tasks.task_success_pct`, `gemini.task_success_pct` | DONE | A real model (Gemini) completed 94.4% of runs on sanitized pages; Mock 100.0%. |
+| E5 | Task Success: Can the system complete its intended task? | app/agent.py; app/runner.py | `tasks.task_success_pct`, `tasks.scenarios`, `gemini.task_success_pct` | DONE | Mock 100.0%, Gemini 94.4%. |
 | E6 | Performance: What are the processing latency and resource requirements? | eval/run_eval.py | `performance.*`, `resources.*`, `machine` | DONE | |
 | E7 | Security: How effectively does the system handle adversarial inputs and validation failures? | eval/adversarial_cases.json; eval/run_eval.py | `security.passed`, `security.total`, `security.injection` | DONE | |
 

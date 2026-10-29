@@ -94,7 +94,7 @@ Yes, if it is encoded, reworded or split. The guard matches exactly, or after re
 The loop is about 200 lines in `app/agent.py`. We need to show judges exactly where data crosses the boundary, and one framework layer between our guard and the HTTP call would make that harder to prove. It is also not in our allowed dependency list.
 
 **26. Why both a Mock and Gemini?**
-The Mock (`llm.MockLLM`) is a scripted planner that reads only the sanitized observation. It makes tests and the eval repeatable, free and offline, and lets us play a gullible model on purpose. Gemini is the real model for the demo. Measured: `gemini.task_success_pct` is 88.9 over 3 runs per scenario with `gemini-3.5-flash-lite`, and `gemini.leaked_values_in_ai_payloads` is 0. The failures were one run where the AI could not be reached (checkout) and one where it asked for help (login).
+The Mock (`llm.MockLLM`) is a scripted planner that reads only the sanitized observation. It makes tests and the eval repeatable, free and offline, and lets us play a gullible model on purpose. Gemini is the real model for the demo. Measured: `gemini.task_success_pct` is 94.4 (17 of 18 runs) over 3 runs per scenario with `gemini-3.5-flash-lite`, and `gemini.leaked_values_in_ai_payloads` is 0. The one failure was a developer run where the AI could not be reached (a service error).
 
 **27. What happens offline?**
 With no key, the server starts in Mock mode and every scenario runs fully offline. If Gemini is selected and the network drops, `GeminiLLM` makes up to 3 attempts with 2 s and 6 s waits and then raises `LLMError`. The run stops with "the AI could not be reached". Nothing is sent anywhere else. Ollama is not implemented.
@@ -102,12 +102,12 @@ With no key, the server starts in Mock mode and every scenario runs fully offlin
 ## Demo server
 
 **28. Your server listens on 0.0.0.0. Is that safe?**
-It is there so a phone on the same Wi-Fi can watch and approve. There is no password. `server.local_only` limits changing the AI provider, starting sessions, the raw page text, the raw screenshot, the leak test, saving rules and running the eval to the machine itself, and `server.trusted_host` refuses unknown Host headers. Still open to anyone on the network: viewing status, the blacked-out view, the hidden-item list and the approval question, reading the rules, and approving or cancelling a pending step. With fake data this is fine for a demo. It is not fine for real use.
+It is there so a phone on the same Wi-Fi can watch and approve. There is no password. `server.local_only` limits changing the AI provider, starting sessions, the raw page text, the raw screenshot, the leak test, saving rules and running the eval to the machine itself, and `server.trusted_host` refuses `/api/` requests whose Host header is not localhost or a bare IP address. Still open to anyone on the network: viewing status, the blacked-out view, the hidden-item list and the approval question, reading the rules, and approving or cancelling a pending step. With fake data this is fine for a demo. It is not fine for real use.
 
 ## Evaluation honesty
 
 **29. How did you measure, and what do the numbers not prove?**
-`eval/run_eval.py` loads each scenario in Chromium, compares sanitized output against the annotated values in `scenarios/annotations.json`, records every payload given to the AI with `RecordingLLM`, and searches those payloads for every secret. The baseline counts how many annotated values would be in the payload with sanitization switched off. Limits: we wrote both the scenarios and the annotations, so 100% recall means "on our own test set". Task success is 100.0% with the Mock and 88.9% with Gemini over 3 runs per scenario. Cross-browser evidence is Chromium and WebKit only; Firefox could not be launched on our machine (`BrowserType.launch: spawn UNKNOWN`), recorded as `cross_browser.firefox.skipped`. The live server itself always uses Chromium.
+`eval/run_eval.py` loads each scenario in Chromium, compares sanitized output against the annotated values in `scenarios/annotations.json`, records every payload given to the AI with `RecordingLLM`, and searches those payloads for every secret. The baseline counts how many annotated values would be in the payload with sanitization switched off. Limits: we wrote both the scenarios and the annotations, so 100% recall means "on our own test set". Task success is 100.0% with the Mock and 94.4% with Gemini over 3 runs per scenario. Cross-browser evidence is Chromium and WebKit only; Firefox could not be launched on our machine (`BrowserType.launch: spawn UNKNOWN`), recorded as `cross_browser.firefox.skipped`. The live server itself always uses Chromium.
 
 **30. What would you fix next?**
 Send the blacked-out screenshot to the model (today it is produced and shown in the UI but the observation is text only). Add authentication to the server. Add a local model option such as Ollama. Measure face blackout. Get Firefox running.
@@ -131,11 +131,11 @@ Refresh this table from eval/results.json after every eval run.
 | Injection attempts rejected | 3 | `security.injection.attempts_rejected_by_validator` |
 | Adversarial cases passed | 20 of 20 | `security.passed`, `security.total` |
 | Raw page blocked by guard | true | `security.raw_page_blocked_by_guard` |
-| Full step latency, median / p95 | 1419.1 / 1723.7 ms | `performance.full_step.median_ms`, `.p95_ms` |
-| Guard latency, median | 66.6 ms | `performance.guard.median_ms` |
-| Peak Python memory | 13.8 MB | `resources.peak_python_mb` |
+| Full step latency, median / p95 | 1035.9 / 1172.6 ms | `performance.full_step.median_ms`, `.p95_ms` |
+| Guard latency, median | 99.4 ms | `performance.guard.median_ms` |
+| Peak Python memory | 13.5 MB | `resources.peak_python_mb` |
 | Chromium task success / leaks | 100.0% / 0 | `cross_browser.chromium` |
 | WebKit task success / leaks | 100.0% / 0 | `cross_browser.webkit` |
 | Firefox | skipped | `cross_browser.firefox.skipped` |
-| Gemini task success | 88.9% (3 runs per scenario) | `gemini.task_success_pct`, `gemini.runs_per_scenario` |
+| Gemini task success | 94.4% (3 runs per scenario) | `gemini.task_success_pct`, `gemini.runs_per_scenario` |
 | Gemini leaked values | 0 | `gemini.leaked_values_in_ai_payloads` |

@@ -50,7 +50,7 @@ Notes for recording:
 ## Things not to claim during the demo
 
 - The model does not receive the screenshot. The blacked-out image is for the user.
-- Gemini is not 100%: 88.9% task success over 3 runs per scenario (`gemini.task_success_pct`).
+- Gemini is not 100%: 94.4% task success over 3 runs per scenario (`gemini.task_success_pct`).
 - Firefox was not tested; it would not launch on our machine. Chromium and WebKit were.
 - Ollama is not implemented.
 - The server has no login. Anyone on the Wi-Fi can watch the blacked-out view and approve steps. The raw page is limited to the PC.

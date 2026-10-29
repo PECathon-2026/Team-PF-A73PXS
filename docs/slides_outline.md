@@ -98,10 +98,10 @@ Speaker note: The leak test skips the sanitizer on purpose. It shows the last li
 | Recall | 100.0% of 29 | `detection.recall_overall_pct`, `detection.items_checked` |
 | Precision | 100.0%, 0 of 44 lookalikes hidden | `detection.precision_pct`, `detection.lookalikes_wrongly_hidden` |
 | Task success (Mock) | 100.0% | `tasks.task_success_pct` |
-| Task success (Gemini, 3 runs per scenario) | 88.9%, 0 leaks | `gemini.task_success_pct`, `gemini.leaked_values_in_ai_payloads` |
+| Task success (Gemini, 3 runs per scenario) | 94.4%, 0 leaks | `gemini.task_success_pct`, `gemini.leaked_values_in_ai_payloads` |
 | Leaked values in AI payloads | 0 | `tasks.leaked_values_in_ai_payloads` |
-| Full step median / p95 | 1419.1 / 1723.7 ms | `performance.full_step` |
-| Peak Python memory | 13.8 MB | `resources.peak_python_mb` |
+| Full step median / p95 | 1035.9 / 1172.6 ms | `performance.full_step` |
+| Peak Python memory | 13.5 MB | `resources.peak_python_mb` |
 | Chromium / WebKit | 100.0% success, 0 leaks each | `cross_browser` |
 
 - Firefox skipped: it would not launch on our machine.
@@ -115,7 +115,7 @@ Speaker note: Say the limits out loud before a judge asks.
 - Tasks (status from docs/requirements_matrix.md):
   - A) Sensitive Information Detection: DONE, except AI-Based Detection PARTIAL (faces not measured, no NER). `detectors`, `structure`, `context_rules`, `faces`.
   - B) Privacy-Preserving Sanitization: DONE. `sanitizer`, `guard`.
-  - C) AI Reasoning and Automation: DONE (Mock 100.0%, Gemini 88.9%). `agent`, `llm`, `validator`, `executor`.
+  - C) AI Reasoning and Automation: DONE (Mock 100.0%, Gemini 94.4%). `agent`, `llm`, `validator`, `executor`.
   - D) Privacy and Security Validation: DONE, except retention PARTIAL (documented, not tested). `guard`, `scrub`, `executor.block_external`.
 - Evaluation scenarios:
   - E-commerce checkout: card details and addresses. DONE

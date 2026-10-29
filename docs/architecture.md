@@ -39,7 +39,7 @@ flowchart LR
 - Page content is untrusted, even though it is shown in a local browser. It may contain hidden instructions or try to send data out.
 - The AI service is outside. It receives only what passes `check_outbound`, and its replies are untrusted until `validate` accepts them.
 - The vault, the raw snapshot and the executor are trusted and local.
-- The web UI and API are local, but the server listens on 0.0.0.0 with no password so a phone can join. Settings, runs, the raw view and the leak test accept only requests from this machine; a Host header check refuses DNS rebinding (see threat_model.md).
+- The web UI and API are local, but the server listens on 0.0.0.0 with no password so a phone can join. Settings, runs, the raw view and the leak test accept only requests from this machine; a Host header check accepts only localhost or a bare IP address, which refuses DNS rebinding (see threat_model.md).
 
 ## The two covered transmission pathways
 1. AI request payload. Built by `build_observation` from sanitized data only. `agent._step` runs `check_outbound` on the exact string (system prompt plus observation) before `LLM.next_action`. Any finding, vault value, canary or exception blocks the step.

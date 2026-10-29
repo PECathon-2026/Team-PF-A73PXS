@@ -334,7 +334,7 @@ From `eval/results.json` (mode: full, Windows 11, 12 CPUs, 15.7 GB RAM, Python 3
 | Raw page blocked by guard | true | `security.raw_page_blocked_by_guard` |
 | Injection: card pasted into feedback | false | `security.injection.card_pasted_into_feedback` |
 | Injection: attempts rejected by validator | 3 | `security.injection.attempts_rejected_by_validator` |
-| Gemini task success | 88.9% (`gemini-3.5-flash-lite`, 3 runs per scenario) | `gemini.task_success_pct` |
+| Gemini task success | 94.4% (`gemini-3.5-flash-lite`, 3 runs per scenario) | `gemini.task_success_pct` |
 | Gemini leaked values in AI payloads | 0 | `gemini.leaked_values_in_ai_payloads` |
 | Chromium | 100.0% success, 0 leaks | `cross_browser.chromium` |
 | WebKit | 100.0% success, 0 leaks | `cross_browser.webkit` |
@@ -342,19 +342,19 @@ From `eval/results.json` (mode: full, Windows 11, 12 CPUs, 15.7 GB RAM, Python 3
 
 Recall by type: AADHAAR, ACCOUNT, ADDRESS, API_KEY, EMAIL, IP_ADDRESS, MEDICAL, NAME, OTP, PAN and PHONE are each 100.0% (`detection.recall_by_type_pct`).
 
-Gemini successes by scenario: checkout 2, login 2, support 3, video 3, developer 3, injection 3. Failure reasons: "checkout: Stopped: the AI could not be reached." and "login: Stopped: the AI needs your help."
+Gemini successes by scenario (out of 3 each): checkout 3, login 3, support 3, video 3, developer 2, injection 3, so 17 of 18 runs. The one failure reason: "developer: Stopped: the AI could not be reached." This is a service or network error, not a wrong action by the model.
 
 Latency in ms (`performance`):
 
 | Stage | Median | p95 |
 |---|---|---|
-| snapshot | 149.5 | 229.6 |
-| detect | 4.0 | 10.0 |
-| sanitize | 152.4 | 239.1 |
-| guard | 66.6 | 137.8 |
-| full step | 1419.1 | 1723.7 |
+| snapshot | 144.9 | 187.0 |
+| detect | 4.3 | 7.2 |
+| sanitize | 159.3 | 242.2 |
+| guard | 99.4 | 165.1 |
+| full step | 1035.9 | 1172.6 |
 
-Resources: peak Python memory 13.8 MB, process RSS 130.4 MB (`resources`).
+Resources: peak Python memory 13.5 MB, process RSS 133.9 MB (`resources`).
 
 ### Scope of the leakage claim
 
@@ -366,7 +366,7 @@ Resources: peak Python memory 13.8 MB, process RSS 130.4 MB (`resources`).
 python -m pytest -q
 ```
 
-The suite collects 167 tests (`python -m pytest --collect-only -q`). It covers detectors, guard, validator, the Mock agent on every scenario, no-leak checks, adversarial cases, server endpoints and UI acceptance tests in Playwright that also write the screenshots in `docs/screens/`. The acceptance tests need the Playwright browsers installed.
+The suite collects 174 tests (`python -m pytest --collect-only -q`). The last full run (`python -m pytest -q`) reported 174 passed, 1 warning. It covers detectors, guard, validator, the Mock agent on every scenario, no-leak checks, adversarial cases, server endpoints and UI acceptance tests in Playwright that also write the screenshots in `docs/screens/`. The acceptance tests need the Playwright browsers installed.
 
 Run `python scripts/precommit_scan.py` before committing; it scans staged files for secrets.
 
