@@ -22,3 +22,11 @@ async def _run(base_url: str, scenario: str):
 def test_mock_completes_scenario(base_url, scenario):
     session = asyncio.run(_run(base_url, scenario))
     assert session.success, [(e.kind, e.detail) for e in session.events]
+
+
+def test_each_secret_goes_into_its_own_field(base_url):
+    session = asyncio.run(_run(base_url, "checkout"))
+    typed = {h["label"]: h["value"] for h in session.history if h["action"] == "type"}
+    assert typed["CVV"] == "{{CVV#1}}"
+    assert typed["Card number"] == "{{CARD#1}}"
+    assert typed["Expiry (MM/YY)"] == "{{EXPIRY#1}}"

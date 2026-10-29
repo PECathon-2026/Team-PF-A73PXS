@@ -22,6 +22,10 @@ SCENARIO_FILES = {
     "checkout": "01_checkout.html", "login": "02_login_otp.html", "support": "03_support_chat.html",
     "video": "04_video_call.html", "developer": "05_dev_settings.html", "injection": "06_injection.html",
 }
+HUMAN_FIELD = {"CARD": "your card number", "CVV": "the card security code", "EXPIRY": "the card expiry",
+               "PASSWORD": "your password", "OTP": "the one-time code", "EMAIL": "your email", "PHONE": "your phone",
+               "NAME": "your name", "ADDRESS": "your address"}
+TECHNICAL = re.compile(r"redacted|guard|payload|llm|token", re.I)
 SECRET_WORDS = {"CARD": "card number", "CVV": "card security code", "PASSWORD": "password", "OTP": "one-time code"}
 
 
@@ -91,7 +95,14 @@ class Session:
         return bool(self.approval_answer)
 
 
+def _narration(action: Action, kind: str) -> str:
+    if action.action == "type":
+        return f"Filling in {HUMAN_FIELD.get(kind, 'a field')}..."
+    return "Pressing a button..." if action.action == "click" else "Looking at the page..."
+
+
 def _question(action: Action, label: str, raw_text: str, vault: Vault, kind: str) -> tuple[str, str]:
+    label = TECHNICAL.sub("item", label)
     if kind in SECRET_WORDS and action.action == "type":
         return f"Use your saved {SECRET_WORDS[kind]} for \"{label}\"?", "It fills in private details that stay on this device."
     amount = re.search(r"(?:Rs\.?|INR)\s?[\d,]+", raw_text)
@@ -140,7 +151,7 @@ async def _act(session: Session, n: int, action: Action, result, raw, san) -> st
     label = (element.label or element.text) if element else ""
     kind = san.element_types.get(action.target, "")
     group = "payment" if kind in {"CARD", "CVV"} else kind
-    session.narration = f"Working on \"{label}\"..." if label else "Thinking..."
+    session.narration = _narration(action, kind)
     if result.needs_approval and group not in session._approved_groups:
         question, why = _question(action, label, raw.page_text, session.vault, kind)
         session.emit(n, "approval", "asked the user")

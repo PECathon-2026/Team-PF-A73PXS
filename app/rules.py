@@ -7,7 +7,7 @@ RULES_PATH = Path(__file__).resolve().parent.parent / "config" / "rules.json"
 ALL_TYPES = [
     "CARD", "AADHAAR", "PAN", "EMAIL", "PHONE", "OTP", "PASSWORD", "API_KEY",
     "IP_ADDRESS", "UPI", "IFSC", "CVV", "NAME", "ADDRESS", "DOB", "MEDICAL",
-    "ACCOUNT", "EXPIRY", "FACE",
+    "ACCOUNT", "EXPIRY", "CUSTOM", "FACE",
 ]
 
 

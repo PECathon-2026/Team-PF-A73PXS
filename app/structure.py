@@ -31,13 +31,13 @@ NAME_WORDS = [
 
 def structural_type(attrs: dict[str, str]) -> tuple[str, str] | None:
     """Decide from markup alone whether an input holds something sensitive."""
+    hint = AUTOCOMPLETE_TYPES.get(attrs.get("autocomplete", "").lower())
+    if hint:
+        return hint
     if attrs.get("type") == "password":
         return "PASSWORD", "password field"
     if attrs.get("type") in INPUT_TYPES:
         return INPUT_TYPES[attrs["type"]]
-    hint = AUTOCOMPLETE_TYPES.get(attrs.get("autocomplete", "").lower())
-    if hint:
-        return hint
     words = " ".join(attrs.get(k, "") for k in ("name", "id", "aria-label", "label", "placeholder")).lower()
     for pattern, type_ in NAME_WORDS:
         if re.search(pattern, words):
