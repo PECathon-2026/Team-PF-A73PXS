@@ -1,0 +1,10 @@
+﻿fastapi
+uvicorn
+playwright
+httpx
+python-dotenv
+pytest
+opencv-python<5
+Pillow
+psutil
+numpy

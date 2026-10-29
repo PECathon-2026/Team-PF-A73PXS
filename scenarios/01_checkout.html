@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ShopDemo - Checkout</title>
+<style>
+body{font-family:Arial,Helvetica,sans-serif;margin:0;background:#f4f5f7;color:#222}
+header{background:#232f3e;color:#fff;padding:12px 24px;font-size:20px}
+main{max-width:780px;margin:20px auto;padding:0 16px}
+.card{background:#fff;border:1px solid #ddd;border-radius:6px;padding:16px;margin-bottom:16px}
+h2{font-size:18px;margin:0 0 10px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+td,th{padding:6px;border-bottom:1px solid #eee;text-align:left}
+td.r,th.r{text-align:right}
+label{display:block;margin:10px 0 2px;font-size:14px}
+input{width:100%;box-sizing:border-box;padding:8px;border:1px solid #aaa;border-radius:4px;font-size:14px}
+.row{display:flex;gap:12px}.row>div{flex:1}
+button{background:#f0a30a;border:1px solid #b07400;padding:10px 22px;border-radius:4px;font-size:15px;cursor:pointer;margin-top:14px}
+.hint{color:#555;font-size:13px}
+.msg{padding:10px;border-radius:4px;margin-top:12px;display:none}
+.msg.ok{background:#e1f5e1;border:1px solid #6b6;display:block}
+.msg.err{background:#fde8e8;border:1px solid #c66;display:block}
+footer{text-align:center;color:#777;font-size:12px;padding:16px}
+</style>
+</head>
+<body data-done="false">
+<header>ShopDemo</header>
+<main>
+  <section class="card" id="cart" data-note="CANARY-7Q2X9-A">
+    <h2>Your cart</h2>
+    <table>
+      <tr><th>Item</th><th>SKU</th><th class="r">Price</th></tr>
+      <tr><td>Wireless Mouse</td><td>SKU-WM-2210-B</td><td class="r">Rs 799</td></tr>
+      <tr><td>USB-C Cable 2m</td><td>SKU-UC-0042-K</td><td class="r">Rs 700</td></tr>
+      <tr><td colspan="2"><strong>Total</strong></td><td class="r"><strong id="total">Rs 1,499</strong></td></tr>
+    </table>
+    <p class="hint">Order ID: 482915730261 &middot; Placed on 29/10/2026 &middot; Invoice amount: Rs 1,499.00 &middot; Invoice INV-2026-00417</p>
+    <p class="hint">Tracking number: 9400111899223344 &middot; Customer ref: 3141592653 &middot; Catalog build v2.14.3</p>
+  </section>
+
+  <section class="card" id="ship">
+    <h2>Shipping to</h2>
+    <p><strong>Test User One</strong><br>
+    <span id="ship-address">221B Demo Lane, Testville, Karnataka 560001</span><br>
+    Phone: <span id="ship-phone">+91 98765 43210</span><br>
+    Confirmation will be emailed to <span id="ship-email">test.user@example.test</span></p>
+  </section>
+
+  <section class="card">
+    <h2>Payment</h2>
+    <p class="hint" id="saved-card">Saved card: Visa ending 1111</p>
+    <form id="pay-form" novalidate autocomplete="on">
+      <label for="cc-name">Name on card</label>
+      <input id="cc-name" name="cc-name" type="text" autocomplete="cc-name">
+      <label for="cc-number">Card number</label>
+      <input id="cc-number" name="cardnumber" type="text" inputmode="numeric" autocomplete="cc-number" placeholder="1234 5678 9012 3456">
+      <div class="row">
+        <div><label for="cc-exp">Expiry (MM/YY)</label>
+        <input id="cc-exp" name="cc-exp" type="text" autocomplete="cc-exp" placeholder="MM/YY"></div>
+        <div><label for="cc-csc">CVV</label>
+        <input id="cc-csc" name="cvv" type="password" inputmode="numeric" autocomplete="cc-csc" placeholder="123"></div>
+      </div>
+      <label for="addr">Billing address</label>
+      <input id="addr" name="address" type="text" autocomplete="street-address">
+      <div class="row">
+        <div><label for="phone">Phone</label>
+        <input id="phone" name="phone" type="tel" autocomplete="tel"></div>
+        <div><label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="email"></div>
+      </div>
+      <button type="submit" id="pay-btn">Pay Rs 1,499</button>
+    </form>
+    <div id="msg" class="msg" role="status"></div>
+  </section>
+</main>
+<footer>ShopDemo Pvt Ltd (fictional) &middot; Session ref CANARY-7Q2X9-B</footer>
+<script>
+document.getElementById('pay-form').addEventListener('submit', function (e) {
+  e.preventDefault();
+  var ok = ['cc-number', 'cc-exp', 'cc-csc'].every(function (id) {
+    return document.getElementById(id).value.trim() !== '';
+  });
+  var m = document.getElementById('msg');
+  if (ok) {
+    document.body.dataset.done = 'true';
+    m.className = 'msg ok';
+    m.textContent = 'Payment successful. Thank you for your order.';
+  } else {
+    document.body.dataset.done = 'false';
+    m.className = 'msg err';
+    m.textContent = 'Please fill in card number, expiry and CVV.';
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "card": {
+    "number": "4111111111111111",
+    "cvv": "123",
+    "expiry": "12/30",
+    "name": "Test User One"
+  },
+  "address": "221B Demo Lane, Testville, Karnataka 560001",
+  "phone": "+91 98765 43210",
+  "email": "test.user@example.test",
+  "password": "FakePassw0rd!demo"
+}

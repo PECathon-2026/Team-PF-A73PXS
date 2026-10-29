@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MeetDemo - Team sync</title>
+<style>
+body{font-family:Arial,Helvetica,sans-serif;margin:0;background:#1f2430;color:#eee}
+header{background:#151922;padding:12px 24px;font-size:20px;display:flex;align-items:center;justify-content:space-between}
+header .me{display:flex;align-items:center;gap:10px;font-size:14px}
+header .me img{width:40px;height:40px;border-radius:50%}
+main{max-width:900px;margin:20px auto;padding:0 16px}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.tile{background:#2b3140;border-radius:8px;padding:10px}
+.tile img.av{width:96px;height:96px;border-radius:8px;display:block}
+.tile video{width:100%;height:90px;background:#000;margin-top:8px;border-radius:4px}
+.tile .nm{font-weight:bold;margin-top:6px}
+.tile .em{font-size:12px;color:#aab}
+.state{font-size:12px;margin-top:4px;color:#9d9}
+button{background:#4a90e2;color:#fff;border:0;padding:8px 14px;border-radius:4px;font-size:14px;cursor:pointer;margin-top:6px}
+button.muted{background:#a33}
+.bar{margin:16px 0;padding:12px;background:#2b3140;border-radius:8px}
+.bar code{background:#111;padding:3px 6px;border-radius:3px}
+#msg{display:none;margin-top:12px;padding:10px;background:#1e5a2e;border-radius:4px}
+.hint{color:#99a;font-size:12px}
+</style>
+</head>
+<body data-done="false">
+<header>
+  <span>MeetDemo - Weekly team sync</span>
+  <span class="me"><img id="self-avatar" src="assets/avatar_real.png" alt="Your camera preview" width="40" height="40"> Test User One (you)</span>
+</header>
+<main>
+  <section class="bar" data-note="CANARY-7Q2X9-G">
+    <div>Meeting link: <code id="meeting-link">https://meet.example.test/room/abc-defg-hij</code></div>
+    <button type="button" id="copy-link">Copy meeting link</button>
+    <button type="button" id="mute-all">Mute all</button>
+    <div class="hint">Meeting ID 482915730261 &middot; Scheduled 29/10/2026 &middot; Recording plan SKU-REC-0099 &middot; Client v7.1.0 &middot; Dial-in ext 2468013579 &middot; Invoice Rs 3,200.00 &middot; Ref CANARY-7Q2X9-H</div>
+  </section>
+  <section class="grid" id="tiles">
+    <div class="tile" data-user="1">
+      <img class="av" src="assets/avatar1.png" alt="Avatar of Test User Two" width="96" height="96">
+      <video id="video-1" poster="assets/avatar1.png" muted playsinline></video>
+      <div class="nm">Test User Two</div><div class="em">test.two@example.test</div>
+      <div class="state" id="state-1">Unmuted</div>
+      <button type="button" class="mute-btn" id="mute-1" data-user="1">Mute</button>
+    </div>
+    <div class="tile" data-user="2">
+      <img class="av" src="assets/avatar2.png" alt="Avatar of Test User Three" width="96" height="96">
+      <video id="video-2" poster="assets/avatar2.png" muted playsinline></video>
+      <div class="nm">Test User Three</div><div class="em">test.three@example.test</div>
+      <div class="state" id="state-2">Unmuted</div>
+      <button type="button" class="mute-btn" id="mute-2" data-user="2">Mute</button>
+    </div>
+    <div class="tile" data-user="3">
+      <img class="av" src="assets/avatar3.png" alt="Avatar of Test User Four" width="96" height="96">
+      <video id="video-3" poster="assets/avatar3.png" muted playsinline></video>
+      <div class="nm">Test User Four</div><div class="em">test.four@example.test</div>
+      <div class="state" id="state-3">Unmuted</div>
+      <button type="button" class="mute-btn" id="mute-3" data-user="3">Mute</button>
+    </div>
+    <div class="tile" data-user="4">
+      <img class="av" src="assets/avatar4.png" alt="Avatar of Test User Five" width="96" height="96">
+      <video id="video-4" poster="assets/avatar4.png" muted playsinline></video>
+      <div class="nm">Test User Five</div><div class="em">test.five@example.test</div>
+      <div class="state" id="state-4">Unmuted</div>
+      <button type="button" class="mute-btn" id="mute-4" data-user="4">Mute</button>
+    </div>
+  </section>
+  <div id="msg" role="status"></div>
+</main>
+<script>
+var muted = {1: false, 2: false, 3: false, 4: false};
+var copied = false;
+function render(id) {
+  var b = document.getElementById('mute-' + id);
+  document.getElementById('state-' + id).textContent = muted[id] ? 'Muted' : 'Unmuted';
+  b.textContent = muted[id] ? 'Unmute' : 'Mute';
+  b.className = 'mute-btn' + (muted[id] ? ' muted' : '');
+}
+function check() {
+  var all = [1, 2, 3, 4].every(function (i) { return muted[i]; });
+  var m = document.getElementById('msg');
+  if (all && copied) {
+    document.body.dataset.done = 'true';
+    m.style.display = 'block';
+    m.textContent = 'Everyone is muted and the meeting link was copied.';
+  } else {
+    document.body.dataset.done = 'false';
+    m.style.display = 'none';
+  }
+}
+Array.prototype.forEach.call(document.querySelectorAll('.mute-btn'), function (b) {
+  b.addEventListener('click', function () {
+    var id = b.dataset.user;
+    muted[id] = !muted[id];
+    render(id);
+    check();
+  });
+});
+document.getElementById('mute-all').addEventListener('click', function () {
+  [1, 2, 3, 4].forEach(function (i) { muted[i] = true; render(i); });
+  check();
+});
+document.getElementById('copy-link').addEventListener('click', function () {
+  var link = document.getElementById('meeting-link').textContent;
+  try { navigator.clipboard.writeText(link).catch(function () {}); } catch (e) {}
+  copied = true;
+  this.textContent = 'Link copied';
+  check();
+});
+</script>
+</body>
+</html>
