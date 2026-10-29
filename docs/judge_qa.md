@@ -94,10 +94,10 @@ Yes, if it is encoded, reworded or split. The guard matches exactly, or after re
 The loop is about 200 lines in `app/agent.py`. We need to show judges exactly where data crosses the boundary, and one framework layer between our guard and the HTTP call would make that harder to prove. It is also not in our allowed dependency list.
 
 **26. Why both a Mock and Gemini?**
-The Mock (`llm.MockLLM`) is a scripted planner that reads only the sanitized observation. It makes tests and the eval repeatable, free and offline, and lets us play a gullible model on purpose. Gemini is the real model for the demo. Measured: `gemini.task_success_pct` is 94.4 (17 of 18 runs) over 3 runs per scenario with `gemini-3.5-flash-lite`, and `gemini.leaked_values_in_ai_payloads` is 0. The one failure was a developer run where the AI could not be reached (a service error).
+The Mock (`llm.MockLLM`) is a scripted planner that reads only the sanitized observation. It makes tests and the eval repeatable, free and offline, and lets us play a gullible model on purpose. Gemini is the real model for the demo. Measured: `gemini.task_success_pct` is 94.4 (17 of 18 runs) over 3 runs per scenario with `gemini-3.5-flash-lite`, and `gemini.leaked_values_in_ai_payloads` is 0. The one failure was a developer run where the AI could not be reached (a service error). That 94.4% is official but was measured before the model fallback chain.
 
 **27. What happens offline?**
-With no key, the server starts in Mock mode and every scenario runs fully offline. If Gemini is selected and the network drops, `GeminiLLM` makes up to 3 attempts with 2 s and 6 s waits and then raises `LLMError`. The run stops with "the AI could not be reached". Nothing is sent anywhere else. Ollama is not implemented.
+With no key, the server starts in Mock mode and every scenario runs fully offline. If Gemini is selected and the network drops, `GeminiLLM` tries `GEMINI_MODEL` and then the models in `GEMINI_FALLBACK_MODELS`, up to 3 rounds with 2 s and 6 s waits (longer if the service asks through `Retry-After` or `retryDelay`, plus jitter), and then raises `LLMError`. The run stops with "the AI could not be reached". Nothing is sent anywhere else. Ollama is not implemented.
 
 ## Demo server
 
@@ -139,3 +139,14 @@ Refresh this table from eval/results.json after every eval run.
 | Firefox | skipped | `cross_browser.firefox.skipped` |
 | Gemini task success | 94.4% (3 runs per scenario) | `gemini.task_success_pct`, `gemini.runs_per_scenario` |
 | Gemini leaked values | 0 | `gemini.leaked_values_in_ai_payloads` |
+
+The Gemini rows are official and were measured before the fallback chain. The separate benchmark below is not part of `eval/results.json`.
+
+| Separate benchmark | Value | Source |
+|---|---|---|
+| Gemini, before fallback chain | 20/24 (83.3%) | eval/gemini_benchmark.txt |
+| Gemini, with fallback chain | 24/24 (100%) | eval/gemini_benchmark.txt |
+| Re-measure of final default fallbacks | invalid, daily quota used up | eval/gemini_benchmark.txt |
+
+**Why did you add a model fallback chain?**
+The only measured cause of Gemini failures was HTTP 429 rate limiting on the free tier. `GeminiLLM` now tries `GEMINI_MODEL`, then `GEMINI_FALLBACK_MODELS` (default `gemini-3.6-flash,gemini-3.5-flash`; an empty value turns it off). It honours `Retry-After` and `retryDelay`, drops a model whose daily quota is used up, and the audit log names the model that answered each call. Guard, validator and approvals are unchanged, and every model gets the same checked payload. In a separate benchmark (eval/gemini_benchmark.txt, not part of `eval/results.json`) success went from 20/24 (83.3%) to 24/24 (100%). Limits: the free-tier daily quota is still the ceiling (roughly 3 to 13 calls per run), the final default list is covered by unit tests but not by a full real run, and `eval/results.json` records only `GEMINI_MODEL`.

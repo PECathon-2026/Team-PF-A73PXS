@@ -98,7 +98,8 @@ Speaker note: The leak test skips the sanitizer on purpose. It shows the last li
 | Recall | 100.0% of 29 | `detection.recall_overall_pct`, `detection.items_checked` |
 | Precision | 100.0%, 0 of 44 lookalikes hidden | `detection.precision_pct`, `detection.lookalikes_wrongly_hidden` |
 | Task success (Mock) | 100.0% | `tasks.task_success_pct` |
-| Task success (Gemini, 3 runs per scenario) | 94.4%, 0 leaks | `gemini.task_success_pct`, `gemini.leaked_values_in_ai_payloads` |
+| Task success (Gemini, 3 runs per scenario, official, before fallback) | 94.4%, 0 leaks | `gemini.task_success_pct`, `gemini.leaked_values_in_ai_payloads` |
+| Gemini, separate benchmark (not in results.json) | 20/24 (83.3%) before fallback chain, 24/24 (100%) with it | eval/gemini_benchmark.txt |
 | Leaked values in AI payloads | 0 | `tasks.leaked_values_in_ai_payloads` |
 | Full step median / p95 | 1035.9 / 1172.6 ms | `performance.full_step` |
 | Peak Python memory | 13.5 MB | `resources.peak_python_mb` |
@@ -106,6 +107,7 @@ Speaker note: The leak test skips the sanitizer on purpose. It shows the last li
 
 - Firefox skipped: it would not launch on our machine.
 - Gemini is a measured rate, not 100%. Numbers are on our own scenarios, 2 pathways.
+- The Gemini failures we measured were free-tier 429 rate limits; the model fallback chain targets those. The free-tier daily quota remains the ceiling.
 
 Speaker note: Say the limits out loud before a judge asks.
 

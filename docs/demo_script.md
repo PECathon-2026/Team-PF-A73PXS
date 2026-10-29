@@ -5,7 +5,7 @@
 1. Follow README section 2 (create `.venv`, install requirements and Playwright browsers, copy `.env.example` to `.env`, run `python -m app.server`). `run.bat` does the same, but its activate line is broken in the current version; check it before the demo.
 2. Open http://localhost:8000 on the PC.
 3. Phone: join the same Wi-Fi and open `http://<pc-ip>:8000`. Find the IP with `ipconfig` (IPv4 Address). Allow Python through Windows Firewall if asked.
-4. For Gemini, put `GEMINI_API_KEY=...` in `.env`, run `python scripts/check_gemini.py`, and restart. Without a key the app uses the Mock.
+4. For Gemini, put `GEMINI_API_KEY=...` in `.env`, run `python scripts/check_gemini.py`, and restart. Optional: `GEMINI_FALLBACK_MODELS` sets the models tried after a 429 (default `gemini-3.6-flash,gemini-3.5-flash`). The audit log shows "the AI answered (<model>)" for each call. Without a key the app uses the Mock.
 
 The phone can watch and approve. Starting tasks, the leak test, settings, the raw view and the AI switch only work on the PC.
 
@@ -43,6 +43,7 @@ Notes for recording:
 ## Offline fallback
 
 - With no internet, keep the AI on Mock (default without a key, or switch it under "AI choice"). Every scenario runs offline; pages are served from this PC and external requests are blocked anyway.
+- Free-tier daily quota: each run uses roughly 3 to 13 calls. Do not use up the quota rehearsing just before recording.
 - If Gemini is selected and the network drops, the run stops with "the AI could not be reached". Switch to Mock under "AI choice" and start again.
 - If the phone cannot connect (guest Wi-Fi, firewall), approve on the PC. Same sheet, same result.
 - If the server will not start, play the recorded video and show eval/results.md.
@@ -50,7 +51,7 @@ Notes for recording:
 ## Things not to claim during the demo
 
 - The model does not receive the screenshot. The blacked-out image is for the user.
-- Gemini is not 100%: 94.4% task success over 3 runs per scenario (`gemini.task_success_pct`).
+- Gemini is not 100%: 94.4% task success over 3 runs per scenario (`gemini.task_success_pct`), official and measured before the fallback chain. Separate benchmark: 24/24 with the chain (eval/gemini_benchmark.txt).
 - Firefox was not tested; it would not launch on our machine. Chromium and WebKit were.
 - Ollama is not implemented.
 - The server has no login. Anyone on the Wi-Fi can watch the blacked-out view and approve steps. The raw page is limited to the PC.

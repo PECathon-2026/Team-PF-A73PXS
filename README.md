@@ -124,6 +124,7 @@ Then open http://localhost:8000 on the computer.
 |---|---|
 | `GEMINI_API_KEY` | Key for the Gemini API. Leave empty to use the offline Mock only. |
 | `GEMINI_MODEL` | Model name. Empty means `gemini-3.5-flash-lite`. |
+| `GEMINI_FALLBACK_MODELS` | Comma-separated models tried after `GEMINI_MODEL` when it is rate limited or unreachable. Not set means `gemini-3.6-flash,gemini-3.5-flash`. Set it to an empty value to turn fallback off. Commented out in `.env.example`. |
 | `PRIVACYLENS_PORT` | Optional environment variable, default 8000. |
 
 The key is read only from `.env`, sent only in the `x-goog-api-key` header, and never logged.
@@ -139,7 +140,9 @@ It sends one harmless request per model and prints which model answered, never t
 ### Mock or Gemini
 
 - **Mock (offline)**: a scripted planner in `app/llm.py` that reads the same sanitized observation Gemini would get. Used by default when no key is present, and by the tests and the eval.
-- **Gemini**: used only when `GEMINI_API_KEY` is set. Choose it under How it works > AI choice. Requests time out after 30 s. Network errors, HTTP 429 and 5xx are retried, up to 3 attempts with 2 s and 6 s waits between them.
+- **Gemini**: used only when `GEMINI_API_KEY` is set. Choose it under How it works > AI choice. Requests time out after 30 s. On network errors, HTTP 429 and 5xx it moves on to the next model in the fallback chain. `GeminiLLM` asks `GEMINI_MODEL` first, then each model in `GEMINI_FALLBACK_MODELS`. It makes up to 3 rounds over the list, waiting 2 s and then 6 s between rounds (longer if the service asks, plus up to 1 s of jitter). It honours `Retry-After` and the `retryDelay` in a 429 body, and drops a model for the rest of the run when its free-tier daily quota is used up. The guard, validator and approvals are unchanged; every model gets the same already-checked payload. The audit log names the model that answered each call: "the AI answered (<model>)". The first `ask_user` of a run is sent back to the AI with feedback instead of stopping the run.
+
+Why: the only cause of Gemini failures we measured was HTTP 429 rate limiting on the free tier.
 - **Offline test AI that obeys the page**: a Mock that follows the injection page's hidden instructions on purpose, to show the validator stopping it.
 
 Privacy rules (per-type toggles, hints, "Always hide..." patterns) are saved in `config/rules.json`.
@@ -287,6 +290,9 @@ The AI writes `{"action": "type", "target": "e4", "value": "{{CARD#1}}"}`. After
 - Firefox could not be launched on our development machine (`BrowserType.launch: spawn UNKNOWN`). Chromium and WebKit were measured.
 - Ollama (local LLM) is not implemented. Offline mode means the Mock planner.
 - Gemini task success is a measured rate (see results), not 100%. Runs fail when the service cannot be reached or the model asks for help.
+- The free-tier daily quota is the ceiling. Each run uses roughly 3 to 13 calls; once every model in the chain is out of quota, runs stop.
+- `eval/results.json` records only `GEMINI_MODEL`, not which model answered each call.
+- The final default fallbacks are covered by unit tests, not by a full real run. `gemini-3.8-flash` timed out in testing, so it is not in the default list.
 - Approval for clicks is decided from the button label. A page can still label a free-text box as a card field; approval for CARD tokens is then the remaining check.
 - Canaries are caught by matching after spacing, case, zero-width characters and JSON escapes are removed. An encoded (for example base64), reworded or split canary is not caught by the guard.
 - A short saved value such as a 3-digit CVV that appears as a whole word elsewhere makes the guard block the step (a false block, not a leak).
@@ -344,6 +350,10 @@ Recall by type: AADHAAR, ACCOUNT, ADDRESS, API_KEY, EMAIL, IP_ADDRESS, MEDICAL, 
 
 Gemini successes by scenario (out of 3 each): checkout 3, login 3, support 3, video 3, developer 2, injection 3, so 17 of 18 runs. The one failure reason: "developer: Stopped: the AI could not be reached." This is a service or network error, not a wrong action by the model.
 
+The 94.4% above is the official number. It was measured before the model fallback chain existed and should be re-run with `python eval/run_eval.py` after the free-tier daily quota resets.
+
+**Separate benchmark (not part of `eval/results.json`)**: `eval/gemini_bench.py`, 6 scenarios x 4 runs, logs in `eval/gemini_benchmark.txt`. Before the fallback chain: 20/24 (83.3%). With the fallback chain (first version: `gemini-3.6-flash`, `gemini-3.8-flash`): 24/24 (100%). A later re-measure of the final default fallbacks (`gemini-3.6-flash`, `gemini-3.5-flash`) is invalid: the free-tier daily quota was used up and every model returned 429 with a `retryDelay` of about 37,500 s, so it gave no rate.
+
 Latency in ms (`performance`):
 
 | Stage | Median | p95 |
@@ -366,7 +376,7 @@ Resources: peak Python memory 13.5 MB, process RSS 133.9 MB (`resources`).
 python -m pytest -q
 ```
 
-The suite collects 174 tests (`python -m pytest --collect-only -q`). The last full run (`python -m pytest -q`) reported 174 passed, 1 warning. It covers detectors, guard, validator, the Mock agent on every scenario, no-leak checks, adversarial cases, server endpoints and UI acceptance tests in Playwright that also write the screenshots in `docs/screens/`. The acceptance tests need the Playwright browsers installed.
+The suite collects 193 tests (`python -m pytest --collect-only -q`). The last full run (`python -m pytest -q`) reported 193 passed, 1 warning. `tests/test_llm.py` covers the Gemini fallback chain against a faked service. It covers detectors, guard, validator, the Mock agent on every scenario, no-leak checks, adversarial cases, server endpoints and UI acceptance tests in Playwright that also write the screenshots in `docs/screens/`. The acceptance tests need the Playwright browsers installed.
 
 Run `python scripts/precommit_scan.py` before committing; it scans staged files for secrets.
 

@@ -7,14 +7,15 @@ Last updated 2026-10-30 at the final documentation pass. Every VERIFIED item nam
 | Item | Proof |
 |---|---|
 | The test suite has 174 tests | `python -m pytest --collect-only -q` -> "174 tests collected" (run during this pass) |
-| Full test suite passes | `python -m pytest -q` -> "174 passed, 1 warning" in the last full run, after the final code changes |
-| Fresh clone works on Windows | `git clone` into a new folder, `run.bat` (venv, dependencies, server started, `/api/config` answered with Mock as default), then `python -m pytest -q` -> 174 passed and `python eval/run_eval.py --quick` -> 100% recall, 0 leaked values. |
+| Full test suite passes | `python -m pytest -q` -> "193 passed, 1 warning" in the last full run, after the final code changes |
+| Fresh clone works on Windows | `git clone` into a new folder, `run.bat` (venv, dependencies, server started, `/api/config` answered with Mock as default), then `python -m pytest -q` -> 174 passed (test count at that time) and `python eval/run_eval.py --quick` -> 100% recall, 0 leaked values. |
 | PII recall 100.0% of 29 annotated values | `eval/results.json`: `detection.recall_overall_pct`, `detection.items_checked` |
 | Precision 100.0%, 0 of 44 lookalikes wrongly hidden | `detection.precision_pct`, `detection.lookalikes_checked`, `detection.lookalikes_wrongly_hidden` |
 | Baseline: 29 values exposed without PrivacyLens, 0 with | `detection.baseline` |
 | 0 annotated values or canaries in Mock AI payloads, 6 scenarios | `tasks.leaked_values_in_ai_payloads`; tests/test_no_leak.py |
 | Mock task success 100.0% | `tasks.task_success_pct` |
-| Gemini task success 94.4% (17 of 18 runs, gemini-3.5-flash-lite, 3 runs per scenario), 0 leaked values; the one failure was "developer: Stopped: the AI could not be reached." (service error) | `gemini.successes_by_scenario`, `gemini.failure_reasons`, `gemini.task_success_pct`, `gemini.runs_per_scenario`, `gemini.leaked_values_in_ai_payloads` |
+| Gemini task success 94.4% (17 of 18 runs, gemini-3.5-flash-lite, 3 runs per scenario), 0 leaked values; the one failure was "developer: Stopped: the AI could not be reached." (service error) | `gemini.successes_by_scenario`, `gemini.failure_reasons`, `gemini.task_success_pct`, `gemini.runs_per_scenario`, `gemini.leaked_values_in_ai_payloads`. Official, measured before the fallback chain. |
+| Separate benchmark, not in `eval/results.json`: Gemini 20/24 (83.3%) before the fallback chain, 24/24 (100%) with it; a later re-measure of the final default fallbacks was invalid (daily quota used up, all models 429) | `eval/gemini_benchmark.txt`, `eval/gemini_bench.py` |
 | 20 of 20 adversarial cases pass | `security.passed`, `security.total` |
 | A raw unsanitized page is blocked by the guard | `security.raw_page_blocked_by_guard` |
 | The injection page does not get the card pasted; 3 attempts rejected | `security.injection.card_pasted_into_feedback`, `security.injection.attempts_rejected_by_validator`; tests/test_agent_mock.py::test_fooled_ai_is_stopped_on_the_injection_page |
@@ -46,4 +47,8 @@ Last updated 2026-10-30 at the final documentation pass. Every VERIFIED item nam
 | Face blackout quality | No measured face recall in eval/results.json. |
 | Browser pathway against a real exfiltration attempt in the eval | No scenario page tries an external request (`tasks.scenarios.*.blocked_requests` = 0). No test fires an external HTTP or WebSocket request at `block_external`. |
 | Gemini behaviour beyond the measured runs | Only 3 runs per scenario on one model. |
+| Official Gemini number after the fallback chain | 94.4% predates the chain. Re-run `python eval/run_eval.py` after the free-tier daily quota resets. |
+| Final default fallbacks in a real run | `gemini-3.6-flash,gemini-3.5-flash` is covered by unit tests only; the re-measure hit the daily quota. `gemini-3.8-flash` timed out in testing and is not a default. |
+| Per-call model in eval results | `eval/results.json` records only `GEMINI_MODEL`; the audit log shows the model per call. |
+| Free-tier quota | The daily quota is the ceiling; each run uses roughly 3 to 13 calls. |
 | Style rules across all code | No automated style check. |
