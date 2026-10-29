@@ -94,7 +94,7 @@ def _p(type_: str, rx: str, reason: str, check=lambda s: True, group: int = 0):
 PATTERNS = [
     _p("CARD", rf"(?<!\d)\d(?:{SEP}?\d){{12,18}}(?!\d)", "digits that pass the card checksum", _card_ok),
     _p("AADHAAR", rf"(?<!\d)(?<!\d{SEP})[2-9]\d{{3}}{SEP}?\d{{4}}{SEP}?\d{{4}}(?!\d)(?!{SEP}\d)",
-       "12 digits that pass the Aadhaar checksum", _aadhaar_ok),
+       "digits that pass the Aadhaar checksum", _aadhaar_ok),
     _p("PAN", r"(?<![A-Za-z0-9])[A-Z]{3}[ABCFGHLJPT][A-Z]\d{4}[A-Z](?![A-Za-z0-9])",
        "matches the PAN format with a valid holder-type letter"),
     _p("API_KEY", r"(?<![A-Za-z0-9])(?:sk-[A-Za-z0-9_\-]{16,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{30,}"

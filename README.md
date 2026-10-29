@@ -6,6 +6,9 @@ Built for PECATHON'26, problem statement PS-004. All data in this repository is 
 
 ![Main screen, 1440x900, light theme](docs/screens/ui_1440x900_light.png)
 
+
+A one-file visual overview with screenshots, the pipeline and setup steps: [docs/overview.html](docs/overview.html) (open it in a browser).
+
 ## Contents
 
 1. [Architecture and data flow](#1-architecture-and-data-flow)
