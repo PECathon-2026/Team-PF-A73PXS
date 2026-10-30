@@ -18,14 +18,24 @@ def narration(action: Action, kind: str) -> str:
     return "Pressing a button..." if action.action == "click" else "Looking at the page..."
 
 
+MONEY = r"(?:Rs\.?|INR)\s?[\d,]+(?:\.\d+)?"
+
+
+def amount_to_pay(page_text: str) -> str:
+    """The amount after the word Total when the page has one, else the first amount on the page."""
+    total = re.search(rf"total\W{{0,6}}({MONEY})", page_text, re.I)
+    first = re.search(MONEY, page_text)
+    return total.group(1) if total else (first.group() if first else "")
+
+
 def action_question(action: Action, label: str, raw_text: str, vault: Vault, kind: str) -> tuple[str, str]:
     label = TECHNICAL.sub("item", label)
     if kind in SECRET_WORDS and action.action == "type":
         return f"Use your saved {SECRET_WORDS[kind]} for \"{label}\"?", "It fills in private details that stay on this device."
-    amount = re.search(r"(?:Rs\.?|INR)\s?[\d,]+", raw_text)
+    amount = amount_to_pay(raw_text)
     card = next((v for t, v, _ in vault.items() if t == "CARD"), "")
     if re.search(r"\bpay\b", label, re.I):
-        parts = [f"Pay {amount.group()}" if amount else "Pay", f"with your card ending {card[-4:]}" if card else ""]
+        parts = [f"Pay {amount}" if amount else "Pay", f"with your card ending {card[-4:]}" if card else ""]
         return " ".join(p for p in parts if p) + "?", "Paying cannot be undone."
     return f"Go ahead and press \"{label}\"?", "This kind of step cannot easily be undone."
 

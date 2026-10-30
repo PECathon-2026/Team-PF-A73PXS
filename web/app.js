@@ -143,7 +143,7 @@ function refreshImages(s) {
 
 function drawFrost(s) {
   const frost = $("frost");
-  const img = $("img-real");
+  const img = $(IS_REMOTE ? "img-ai" : "img-real");
   const [w] = s.size || [0];
   frost.replaceChildren();
   if (!w || !img.clientWidth) return;
@@ -159,8 +159,11 @@ function drawFrost(s) {
 
 function toggleAiView() {
   const on = $("ai-view").checked;
-  $("img-ai").classList.toggle("is-shown", on);
-  $("img-real").classList.toggle("is-shown", !on);
+  // A phone never receives the real page, so there the switch only swaps frosted markers for solid black.
+  if (!IS_REMOTE) {
+    $("img-ai").classList.toggle("is-shown", on);
+    $("img-real").classList.toggle("is-shown", !on);
+  }
   $("frost").classList.toggle("is-off", on);
 }
 
@@ -683,9 +686,8 @@ function init() {
   $("task-form").addEventListener("submit", startTask);
   $("ai-view").addEventListener("change", toggleAiView);
   if (IS_REMOTE) {
-    $("ai-view").checked = true;
-    $("ai-view").disabled = true;
-    toggleAiView();
+    $("img-ai").classList.add("is-shown");
+    $("img-ai").addEventListener("load", () => drawFrost(app.state));
   }
   $("status").addEventListener("click", showStatusDetails);
   $("status-sheet").querySelector("[data-close]").addEventListener("click", () => closeSheet("status-sheet"));

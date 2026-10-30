@@ -202,7 +202,7 @@ The UI saves this file whenever a choice changes (see section 4).
 3. Open `http://<pc-ip>:8000` on the phone.
 4. On Windows, allow Python through the firewall when the prompt appears on first start (private networks). On macOS, allow incoming connections for Python.
 
-The phone shows the AI view only (the real page is never sent to other devices, so the "See what the AI sees" switch is on and locked there) and can approve or cancel steps, including a request to share a kind of data. This was tried on a real Android phone with Chrome (see `docs/screens/real_phone_approval_sheet.png`). Starting tasks, Privacy choices, the AI choice, the raw view and the leak test work only on the computer itself; the "Privacy choices" link is not shown on the phone. The Windows app prints the phone address when it starts.
+The phone shows the AI view only (the real page is never sent to other devices, so on a phone the "See what the AI sees" switch swaps frosted "Hidden" markers for the solid-black AI view) and can approve or cancel steps, including a request to share a kind of data. This was tried on a real Android phone with Chrome (see `docs/screens/real_phone_approval_sheet.png`). Starting tasks, Privacy choices, the AI choice, the raw view and the leak test work only on the computer itself; the "Privacy choices" link is not shown on the phone. The Windows app prints the phone address when it starts.
 
 ## 3. Detection and sanitization methodology
 
